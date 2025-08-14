@@ -15,7 +15,7 @@ namespace gs::loader {
         registry_->registerLoader(std::make_unique<ColmapLoader>());
         registry_->registerLoader(std::make_unique<BlenderLoader>());
 
-        std::println("LoaderService initialized with {} loaders",
+        std::println("LoaderService 初始化完成，共有 {} 个加载器",
                      registry_->size());
     }
 
@@ -57,14 +57,14 @@ namespace gs::loader {
             return std::unexpected(error_msg);
         }
 
-        std::println("Using {} loader for: {}", loader->name(), path.string());
+        std::println("使用 {} 加载器加载: {}", loader->name(), path.string());
 
         // Perform the load
         try {
             return loader->load(path, options);
         } catch (const std::exception& e) {
             return std::unexpected(std::format(
-                "{} loader failed: {}", loader->name(), e.what()));
+                "{} 加载器加载失败: {}", loader->name(), e.what()));
         }
     }
 

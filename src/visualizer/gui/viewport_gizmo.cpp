@@ -36,7 +36,7 @@ namespace gs::gui {
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
                                 "/src/visualizer/resources/assets/JetBrainsMono-Regular.ttf";
         if (!text_renderer_->LoadFont(font_path, 48)) {
-            std::cerr << "ViewportGizmo: Failed to load font!" << std::endl;
+            std::cerr << "ViewportGizmo: 加载字体时出错!" << std::endl;
             text_renderer_.reset();
         }
 
@@ -65,9 +65,9 @@ namespace gs::gui {
                 (gs::visualizer::getShaderPath("viewport_gizmo.frag")).string().c_str(),
                 false // Don't create buffer
             );
-            std::cout << "[ViewportGizmo] Shaders created successfully" << std::endl;
+            std::cout << "[ViewportGizmo] 着色器创建成功" << std::endl;
         } catch (const std::exception& e) {
-            std::cerr << "[ViewportGizmo] ERROR creating shaders: " << e.what() << std::endl;
+            std::cerr << "[ViewportGizmo] 创建着色器时出错: " << e.what() << std::endl;
             throw;
         }
     }

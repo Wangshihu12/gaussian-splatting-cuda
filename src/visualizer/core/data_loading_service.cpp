@@ -33,7 +33,7 @@ namespace gs::visualizer {
 
     std::expected<void, std::string> DataLoadingService::loadPLY(const std::filesystem::path& path) {
         try {
-            std::println("Loading PLY file: {}", path.string());
+            std::println("加载PLY文件: {}", path.string());
 
             // Load through scene manager
             scene_manager_->loadPLY(path);
@@ -44,13 +44,13 @@ namespace gs::visualizer {
             // Emit success event
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
-                .message = std::format("Successfully loaded PLY: {}", path.filename().string()),
+                .message = std::format("成功加载PLY: {}", path.filename().string()),
                 .source = "DataLoadingService"}
                 .emit();
 
             return {};
         } catch (const std::exception& e) {
-            std::string error_msg = std::format("Failed to load PLY: {}", e.what());
+            std::string error_msg = std::format("加载PLY时出错: {}", e.what());
 
             events::notify::Error{
                 .message = error_msg,
@@ -63,11 +63,11 @@ namespace gs::visualizer {
 
     std::expected<void, std::string> DataLoadingService::loadDataset(const std::filesystem::path& path) {
         try {
-            std::println("Loading dataset from: {}", path.string());
+            std::println("加载数据集: {}", path.string());
 
             // Validate parameters
             if (params_.dataset.data_path.empty() && path.empty()) {
-                throw std::runtime_error("No dataset path specified");
+                throw std::runtime_error("未指定数据集路径");
             }
 
             // Load through scene manager
@@ -79,13 +79,13 @@ namespace gs::visualizer {
             // Emit success event
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
-                .message = std::format("Successfully loaded dataset: {}", path.filename().string()),
+                .message = std::format("成功加载数据集: {}", path.filename().string()),
                 .source = "DataLoadingService"}
                 .emit();
 
             return {};
         } catch (const std::exception& e) {
-            std::string error_msg = std::format("Failed to load dataset: {}", e.what());
+            std::string error_msg = std::format("加载数据集时出错: {}", e.what());
 
             events::notify::Error{
                 .message = error_msg,
@@ -103,12 +103,12 @@ namespace gs::visualizer {
 
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
-                .message = "Scene cleared",
+                .message = "场景已清除",
                 .source = "DataLoadingService"}
                 .emit();
         } catch (const std::exception& e) {
             events::notify::Error{
-                .message = "Failed to clear scene",
+                .message = "清除场景时出错",
                 .details = e.what()}
                 .emit();
         }

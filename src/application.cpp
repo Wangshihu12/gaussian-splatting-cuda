@@ -48,13 +48,13 @@ namespace gs {
         }
 
         // 输出抗锯齿配置状态信息
-        std::println("Anti-aliasing: {}", params->optimization.antialiasing ? "enabled" : "disabled");
+        std::println("抗锯齿: {}", params->optimization.antialiasing ? "启用" : "禁用");
 
         // 启动可视化器主循环，开始渲染和交互
         viewer->run();
 
         // 可视化器关闭后的清理信息
-        std::println("Viewer closed.");
+        std::println("查看器已关闭.");
         return 0;                                                           // 成功退出
     }
 } // namespace gs - 高斯散点项目命名空间结束

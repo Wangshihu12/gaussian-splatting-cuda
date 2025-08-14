@@ -197,10 +197,10 @@ namespace gs {
 
                 // Print report
                 if (!all_match || !unknown_params.empty()) {
-                    std::println(stderr, "\nParameter verification report:");
+                    std::println(stderr, "\n参数验证报告:");
 
                     if (!mismatched_values.empty()) {
-                        std::println(stderr, "\nMismatched values:");
+                        std::println(stderr, "\n不匹配的值:");
                         for (const auto& param : mismatched_values) {
                             std::print(stderr, "  - {}: JSON={}", param, json[param].dump());
                             // Find and print the default value and description
@@ -219,7 +219,7 @@ namespace gs {
                     }
 
                     if (!missing_in_json.empty()) {
-                        std::println(stderr, "\nParameters in struct but not in JSON:");
+                        std::println(stderr, "\n结构体中存在但JSON中不存在的参数:");
                         for (const auto& param : missing_in_json) {
                             // Find and print the description
                             for (const auto& p : expected_params) {
@@ -232,13 +232,13 @@ namespace gs {
                     }
 
                     if (!unknown_params.empty()) {
-                        std::println(stderr, "\nUnknown parameters in JSON (will be ignored):");
+                        std::println(stderr, "\nJSON中存在未知的参数 (将被忽略):");
                         for (const auto& param : unknown_params) {
                             std::println(stderr, "  - {}", param);
                         }
                     }
                 } else {
-                    std::println("Parameter verification passed successfully!");
+                    std::println("参数验证成功!");
                 }
 
                 return all_match;
@@ -304,7 +304,7 @@ namespace gs {
                         mode == "RGB_D" || mode == "RGB_ED") {
                         params.render_mode = mode;
                     } else {
-                        std::println(stderr, "Warning: Invalid render mode '{}' in JSON. Using default 'RGB'", mode);
+                        std::println(stderr, "警告: 无效的渲染模式 '{}' in JSON. 使用默认值 'RGB'", mode);
                     }
                 }
 
@@ -313,7 +313,7 @@ namespace gs {
                     if (strategy == "mcmc" || strategy == "default") {
                         params.strategy = strategy;
                     } else {
-                        std::println(stderr, "Warning: Invalid optimization strategy '{}' in JSON. Using default 'default'", strategy);
+                        std::println(stderr, "警告: 无效的优化策略 '{}' in JSON. 使用默认值 'default'", strategy);
                     }
                 }
 
@@ -410,7 +410,7 @@ namespace gs {
                 return params;
 
             } catch (const std::exception& e) {
-                return std::unexpected(std::format("Error parsing optimization parameters: {}", e.what()));
+                return std::unexpected(std::format("解析优化参数时出错: {}", e.what()));
             }
         }
 
@@ -496,17 +496,17 @@ namespace gs {
                 std::filesystem::path filepath = output_path / "training_config.json";
                 std::ofstream file(filepath);
                 if (!file.is_open()) {
-                    return std::unexpected(std::format("Could not open file for writing: {}", filepath.string()));
+                    return std::unexpected(std::format("无法打开文件进行写入: {}", filepath.string()));
                 }
 
                 file << json.dump(4); // Pretty print with 4 spaces
                 file.close();
 
-                std::println("Saved training configuration to: {}", filepath.string());
+                std::println("训练配置已保存到: {}", filepath.string());
                 return {};
 
             } catch (const std::exception& e) {
-                return std::unexpected(std::format("Error saving training parameters: {}", e.what()));
+                return std::unexpected(std::format("保存训练参数时出错: {}", e.what()));
             }
         }
 

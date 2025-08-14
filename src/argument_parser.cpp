@@ -375,7 +375,7 @@ gs::args::parse_args_and_params(int argc, const char* const argv[]) {
     if (!params->dataset.data_path.empty()) {
         auto opt_params_result = gs::param::read_optim_params_from_json(params->optimization.strategy);
         if (!opt_params_result) {
-            return std::unexpected(std::format("Failed to load optimization parameters: {}",
+            return std::unexpected(std::format("加载优化参数时出错: {}",
                                             opt_params_result.error()));
         }
         params->optimization = *opt_params_result;  // 应用JSON配置

@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
     auto params_result = gs::args::parse_args_and_params(argc, argv);
     if (!params_result) {
         // 参数解析失败，输出错误信息并退出
-        std::println(stderr, "Error: {}", params_result.error());
+        std::println(stderr, "错误: {}", params_result.error());
         return -1;
     }
     
@@ -63,30 +63,30 @@ int main(int argc, char* argv[]) {
         
         // 无头模式必须提供数据路径
         if (params->dataset.data_path.empty()) {
-            std::println(stderr, "Error: Headless mode requires --data-path");
+            std::println(stderr, "错误: Headless 模式需要 --data-path");
             return -1;
         }
 
-        std::println("Starting headless training...");
+        std::println("开始无图形界面训练...");
 
         // 保存训练配置到JSON文件，便于后续分析和复现
         auto save_result = gs::param::save_training_parameters_to_json(*params, params->dataset.output_path);
         if (!save_result) {
-            std::println(stderr, "Error saving config: {}", save_result.error());
+            std::println(stderr, "错误: 保存配置时出错: {}", save_result.error());
             return -1;
         }
 
         // 设置训练环境（初始化数据加载器、模型、优化器等）
         auto setup_result = gs::setupTraining(*params);
         if (!setup_result) {
-            std::println(stderr, "Error: {}", setup_result.error());
+            std::println(stderr, "错误: {}", setup_result.error());
             return -1;
         }
 
         // 执行训练过程
         auto train_result = setup_result->trainer->train();
         if (!train_result) {
-            std::println(stderr, "Training error: {}", train_result.error());
+            std::println(stderr, "训练错误: {}", train_result.error());
             return -1;
         }
 
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
     // =============================================================================
     
     // 启动带图形界面的查看器应用程序
-    std::println("Starting viewer mode...");
+    std::println("开始查看器模式...");
     
     // 创建应用程序实例
     gs::Application app;

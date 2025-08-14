@@ -135,7 +135,7 @@ namespace gs {
             loadDatasetInternal(path, params);
         } catch (const std::exception& e) {
             events::notify::Error{
-                .message = std::format("Failed to load dataset: {}", e.what()),
+                .message = std::format("加载数据集时出错: {}", e.what()),
                 .details = std::format("Path: {}", path.string())}
                 .emit();
         }
@@ -259,7 +259,7 @@ namespace gs {
 
     void SceneManager::loadDatasetInternal(const std::filesystem::path& path,
                                            const param::TrainingParameters& params) {
-        std::println("SceneManager: Loading dataset: {}", path.string());
+        std::println("SceneManager: 加载数据集: {}", path.string());
 
         // Clear any existing scene
         clearScene();
@@ -277,7 +277,7 @@ namespace gs {
         if (trainer_manager_) {
             trainer_manager_->setTrainer(std::move(setup_result->trainer));
         } else {
-            throw std::runtime_error("No trainer manager available");
+            throw std::runtime_error("没有可用的训练管理器");
         }
 
         // Create scene if needed
@@ -321,7 +321,7 @@ namespace gs {
 
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded dataset with {} images and {} initial Gaussians",
+            .message = std::format("加载数据集: {} 张图像和 {} 个初始高斯",
                                    num_images, current_state_.num_gaussians),
             .source = "SceneManager"}
             .emit();

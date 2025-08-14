@@ -29,7 +29,7 @@ namespace gs::loader {
 
         // Report initial progress
         if (options.progress) {
-            options.progress(0.0f, "Loading COLMAP dataset...");
+            options.progress(0.0f, "加载COLMAP数据集...");
         }
 
         // Check for sparse reconstruction
@@ -39,7 +39,7 @@ namespace gs::loader {
         } else if (std::filesystem::exists(path / "sparse")) {
             sparse_path = path / "sparse";
         } else {
-            return std::unexpected("No sparse reconstruction found (expected 'sparse' or 'sparse/0' directory)");
+            return std::unexpected("未找到稀疏重建 (expected 'sparse' or 'sparse/0' directory)");
         }
 
         // Check for required COLMAP files
@@ -49,7 +49,7 @@ namespace gs::loader {
 
         if (!has_cameras || !has_images) {
             return std::unexpected(std::format(
-                "Missing required COLMAP files. cameras.bin: {}, images.bin: {}",
+                "缺少必需的COLMAP文件. cameras.bin: {}, images.bin: {}",
                 has_cameras ? "found" : "missing",
                 has_images ? "found" : "missing"));
         }
@@ -58,13 +58,13 @@ namespace gs::loader {
         std::filesystem::path image_dir = path / options.images_folder;
         if (!std::filesystem::exists(image_dir)) {
             return std::unexpected(std::format(
-                "Images directory '{}' not found", options.images_folder));
+                "图像目录 '{}' 未找到", options.images_folder));
         }
 
         // Validation only mode
         if (options.validate_only) {
             if (options.progress) {
-                options.progress(100.0f, "COLMAP validation complete");
+                options.progress(100.0f, "COLMAP 验证完成");
             }
 
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -80,7 +80,7 @@ namespace gs::loader {
 
         // Load cameras and images
         if (options.progress) {
-            options.progress(20.0f, "Reading camera parameters...");
+            options.progress(20.0f, "读取相机参数...");
         }
 
         try {
@@ -89,7 +89,7 @@ namespace gs::loader {
                 path, options.images_folder);
 
             if (options.progress) {
-                options.progress(40.0f, std::format("Creating {} cameras...", camera_infos.size()));
+                options.progress(40.0f, std::format("创建 {} 个相机...", camera_infos.size()));
             }
 
             // Create Camera objects
@@ -129,7 +129,7 @@ namespace gs::loader {
                 std::move(cameras), dataset_config, gs::CameraDataset::Split::ALL);
 
             if (options.progress) {
-                options.progress(60.0f, "Loading point cloud...");
+                options.progress(60.0f, "加载点云...");
             }
 
             // Load point cloud if it exists
@@ -137,14 +137,14 @@ namespace gs::loader {
             if (has_points) {
                 auto loaded_pc = read_colmap_point_cloud(path);
                 point_cloud = std::make_shared<PointCloud>(std::move(loaded_pc));
-                std::println("Loaded {} points from COLMAP", point_cloud->size());
+                std::println("从COLMAP加载 {} 个点", point_cloud->size());
             } else {
                 point_cloud = std::make_shared<PointCloud>();
-                std::println("No point cloud found - will use random initialization");
+                std::println("未找到点云 - 将使用随机初始化");
             }
 
             if (options.progress) {
-                options.progress(100.0f, "COLMAP loading complete");
+                options.progress(100.0f, "COLMAP 加载完成");
             }
 
             auto end_time = std::chrono::high_resolution_clock::now();
@@ -161,7 +161,7 @@ namespace gs::loader {
                 .load_time = load_time,
                 .warnings = has_points ? std::vector<std::string>{} : std::vector<std::string>{"No sparse point cloud found - using random initialization"}};
 
-            std::println("COLMAP dataset loaded successfully in {}ms", load_time.count());
+            std::println("COLMAP 数据集加载成功，用时 {}ms", load_time.count());
             std::println("  - {} cameras", camera_infos.size());
             std::println("  - Scene center: [{:.3f}, {:.3f}, {:.3f}]",
                          scene_center[0].item<float>(),
@@ -171,7 +171,7 @@ namespace gs::loader {
             return result;
 
         } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to load COLMAP dataset: {}", e.what()));
+            return std::unexpected(std::format("加载COLMAP数据集时出错: {}", e.what()));
         }
     }
 

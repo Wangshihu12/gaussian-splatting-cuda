@@ -10,7 +10,7 @@ namespace gs::visualizer {
     void MainLoop::run() {
         // Initialize
         if (init_callback_ && !init_callback_()) {
-            std::cerr << "Application initialization failed!" << std::endl;
+            std::cerr << "应用程序初始化失败!" << std::endl;
             return;
         }
 
