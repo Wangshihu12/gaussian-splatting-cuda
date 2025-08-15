@@ -116,5 +116,25 @@ namespace gs::gui::panels {
         ImGui::Text("Status: %s", widgets::GetTrainerStateString(static_cast<int>(response.state)));
         ImGui::Text("Iteration: %d", response.current_iteration);
         ImGui::Text("Loss: %.6f", response.current_loss);
+
+        // 新增：显示训练时间
+        // 需要通过事件系统获取TrainingInfo，或者通过ctx访问
+        // 这里假设我们可以通过某种方式访问到training_info
+        if (auto* viewer = ctx.viewer) {  // 需要确认UIContext是否有viewer指针
+            if (auto training_info = viewer->getTrainingInfo()) {
+                // 当前会话时间
+                if (training_info->getCurrentTrainingTimeSeconds() > 0) {
+                    ImGui::Text("训练时间: %s", training_info->formatTrainingTime().c_str());
+                    
+                    // 显示状态指示
+                    ImGui::SameLine();
+                    if (response.state == events::query::TrainerState::State::Running) {
+                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● 训练中");
+                    } else if (response.state == events::query::TrainerState::State::Paused) {
+                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "⏸ 已暂停");
+                    }
+                }
+            }
+        }
     }
 } // namespace gs::gui::panels

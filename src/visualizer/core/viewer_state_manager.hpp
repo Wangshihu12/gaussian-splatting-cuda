@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <chrono>
+#include <format>
 
 /**
  * [文件描述]：查看器状态管理器头文件
@@ -45,8 +47,103 @@
         std::mutex loss_buffer_mutex_;           // 损失缓冲区互斥锁，保护多线程访问
 
         // =============================================================================
+        // 训练计时相关（原子变量，支持多线程安全访问）
+        // =============================================================================
+        
+        std::chrono::steady_clock::time_point training_start_time_;     // 训练开始时间
+        std::chrono::steady_clock::time_point training_pause_time_;     // 暂停时间点
+        std::chrono::duration<double> total_training_time_{0.0};        // 总训练时间
+        std::chrono::duration<double> current_session_time_{0.0};       // 当前会话时间
+        bool is_timing_ = false;                                        // 是否正在计时
+        bool is_paused_ = false;                                        // 是否暂停状态
+
+        // =============================================================================
         // 公共接口方法
         // =============================================================================
+
+        /**
+         * [功能描述]：开始训练计时
+         */
+        void startTiming() {
+            training_start_time_ = std::chrono::steady_clock::now();
+            is_timing_ = true;
+            is_paused_ = false;
+        }
+
+        /**
+         * [功能描述]：暂停训练计时
+         */
+        void pauseTiming() {
+            if (is_timing_ && !is_paused_) {
+                auto now = std::chrono::steady_clock::now();
+                current_session_time_ += now - training_start_time_;
+                training_pause_time_ = now;
+                is_paused_ = true;
+            }
+        }
+        
+        /**
+         * [功能描述]：恢复训练计时
+         */
+        void resumeTiming() {
+            if (is_timing_ && is_paused_) {
+                training_start_time_ = std::chrono::steady_clock::now();
+                is_paused_ = false;
+            }
+        }
+        
+        /**
+         * [功能描述]：停止训练计时
+         */
+        void stopTiming() {
+            if (is_timing_) {
+                if (!is_paused_) {
+                    auto now = std::chrono::steady_clock::now();
+                    current_session_time_ += now - training_start_time_;
+                }
+                total_training_time_ += current_session_time_;
+                current_session_time_ = std::chrono::duration<double>{0.0};
+                is_timing_ = false;
+                is_paused_ = false;
+            }
+        }
+        
+        /**
+         * [功能描述]：获取当前训练时间（秒）
+         */
+        double getCurrentTrainingTimeSeconds() const {
+            if (!is_timing_) return 0.0;
+            
+            auto session_time = current_session_time_;
+            if (!is_paused_) {
+                auto now = std::chrono::steady_clock::now();
+                session_time += now - training_start_time_;
+            }
+            return session_time.count();
+        }
+        
+        /**
+         * [功能描述]：获取总训练时间（秒）
+         */
+        double getTotalTrainingTimeSeconds() const {
+            return total_training_time_.count() + getCurrentTrainingTimeSeconds();
+        }
+        
+        /**
+         * [功能描述]：格式化时间显示
+         */
+        std::string formatTrainingTime() const {
+            double seconds = getCurrentTrainingTimeSeconds();
+            int hours = static_cast<int>(seconds / 3600);
+            int minutes = static_cast<int>((seconds - hours * 3600) / 60);
+            int secs = static_cast<int>(seconds) % 60;
+            
+            if (hours > 0) {
+                return std::format("{:02d}:{:02d}:{:02d}", hours, minutes, secs);
+            } else {
+                return std::format("{:02d}:{:02d}", minutes, secs);
+            }
+        }
         
         /**
          * [功能描述]：更新训练进度信息

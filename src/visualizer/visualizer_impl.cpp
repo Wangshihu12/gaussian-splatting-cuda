@@ -231,6 +231,10 @@ namespace gs::visualizer {
             if (trainer_manager_) {
                 trainer_manager_->startTraining();  // 委托给训练器管理器执行
             }
+            // 添加计时开始
+            if (auto training_info = state_manager_->getTrainingInfo()) {
+                training_info->startTiming();
+            }
         });
 
         /**
@@ -240,6 +244,10 @@ namespace gs::visualizer {
         cmd::PauseTraining::when([this](const auto&) {
             if (trainer_manager_) {
                 trainer_manager_->pauseTraining();  // 暂停训练循环，保留训练状态
+            }
+            // 添加计时暂停
+            if (auto training_info = state_manager_->getTrainingInfo()) {
+                training_info->pauseTiming();
             }
         });
 
@@ -251,6 +259,10 @@ namespace gs::visualizer {
             if (trainer_manager_) {
                 trainer_manager_->resumeTraining();  // 恢复训练循环执行
             }
+            // 添加计时恢复
+            if (auto training_info = state_manager_->getTrainingInfo()) {
+                training_info->resumeTiming();
+            }
         });
 
         /**
@@ -260,6 +272,10 @@ namespace gs::visualizer {
         cmd::StopTraining::when([this](const auto&) {
             if (trainer_manager_) {
                 trainer_manager_->stopTraining();   // 停止训练并清理资源
+            }
+            // 添加计时停止
+            if (auto training_info = state_manager_->getTrainingInfo()) {
+                training_info->stopTiming();
             }
         });
 
@@ -491,6 +507,13 @@ namespace gs::visualizer {
         // Update the main viewport with window size
         viewport_.windowSize = window_manager_->getWindowSize();
         viewport_.frameBufferSize = window_manager_->getFramebufferSize();
+
+        // 如果正在训练，定期更新GUI以刷新时间显示
+        if (auto training_info = state_manager_->getTrainingInfo()) {
+            if (training_info->getCurrentTrainingTimeSeconds() > 0) {
+                // GUI会在下一帧自动刷新，无需特殊处理
+            }
+        }
 
         // Update tools
         tool_manager_->update();
