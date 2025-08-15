@@ -57,7 +57,7 @@ namespace gs {
             return std::unexpected(std::format("Failed to load dataset: {}", load_result.error()));
         }
 
-        std::println("Dataset loaded successfully using {} loader", load_result->loader_used);
+        std::println("数据集加载成功，使用{}加载器", load_result->loader_used);
 
         // =============================================================================
         // 步骤4：根据加载的数据类型进行处理
@@ -70,7 +70,7 @@ namespace gs {
                 // ---------------------------------------------------------------------
                 // 处理直接PLY文件加载（不支持训练）
                 // ---------------------------------------------------------------------
-                return std::unexpected("Direct PLY loading is not supported for training. Please use a dataset format (COLMAP or Blender).");
+                return std::unexpected("直接PLY加载不支持训练。请使用数据集格式（COLMAP或Blender）。");
 
             } else if constexpr (std::is_same_v<T, loader::LoadedScene>) {
                 // ---------------------------------------------------------------------
@@ -82,10 +82,10 @@ namespace gs {
                 if (data.point_cloud && data.point_cloud->size() > 0) {
                     // 使用加载的点云数据（来自SfM重建）
                     point_cloud_to_use = *data.point_cloud;
-                    std::println("Using point cloud with {} points", point_cloud_to_use.size());
+                    std::println("使用{}点云", point_cloud_to_use.size());
                 } else {
                     // 生成随机初始点云（当没有SfM点云时）
-                    std::println("No point cloud provided, using random initialization");
+                    std::println("没有提供点云，使用随机初始化");
                     
                     // 随机点云生成参数
                     int numInitGaussian = 10000;       // 初始高斯点数量
@@ -113,7 +113,7 @@ namespace gs {
                 );
 
                 if (!splat_result) {
-                    return std::unexpected(std::format("Failed to initialize model: {}", splat_result.error()));
+                    return std::unexpected(std::format("初始化模型失败: {}", splat_result.error()));
                 }
 
                 // ---------------------------------------------------------------------
@@ -125,7 +125,7 @@ namespace gs {
                     strategy = std::make_unique<MCMC>(std::move(*splat_result));
                 } else {
                     // 默认策略当前被禁用，等待新光栅化器集成
-                    throw std::runtime_error("ADC (default strategy) is currently disabled until the new rasterizer is integrated. Please use MCMC strategy instead.");
+                    throw std::runtime_error("ADC（默认策略）当前被禁用，直到新光栅化器集成。请使用MCMC策略。");
                     // strategy = std::make_unique<DefaultStrategy>(std::move(*splat_result));
                 }
 
@@ -149,7 +149,7 @@ namespace gs {
                 
             } else {
                 // 未知的数据类型
-                return std::unexpected("Unknown data type returned from loader");
+                return std::unexpected("未知的数据类型返回自加载器");
             }
         },
                         load_result->data);  // 传入加载结果中的数据变体

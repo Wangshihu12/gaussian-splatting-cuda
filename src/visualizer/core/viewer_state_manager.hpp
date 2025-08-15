@@ -126,6 +126,12 @@
          * [功能描述]：获取总训练时间（秒）
          */
         double getTotalTrainingTimeSeconds() const {
+            // 如果计时器已停止，只返回累积的总时间
+            if (!is_timing_) {
+                return total_training_time_.count();
+            }
+            
+            // 如果计时器仍在运行，包含当前会话时间
             return total_training_time_.count() + getCurrentTrainingTimeSeconds();
         }
         
@@ -143,6 +149,51 @@
             } else {
                 return std::format("{:02d}:{:02d}", minutes, secs);
             }
+        }
+
+        /**
+         * [功能描述]：格式化总训练时间显示（包括已完成的训练）
+         * @return 格式化的时间字符串
+         */
+        std::string formatTotalTrainingTime() const {
+            double seconds = getTotalTrainingTimeSeconds();
+            int hours = static_cast<int>(seconds / 3600);
+            int minutes = static_cast<int>((seconds - hours * 3600) / 60);
+            int secs = static_cast<int>(seconds) % 60;
+            
+            if (hours > 0) {
+                return std::format("{:02d}:{:02d}:{:02d}", hours, minutes, secs);
+            } else {
+                return std::format("{:02d}:{:02d}", minutes, secs);
+            }
+        }
+
+        /**
+         * [功能描述]：获取格式化的最终训练时间（用于完成状态显示）
+         * @return 格式化的时间字符串
+         */
+        std::string formatFinalTrainingTime() const {
+            // 只使用已保存的总训练时间，不包含当前会话
+            double seconds = total_training_time_.count();
+            int hours = static_cast<int>(seconds / 3600);
+            int minutes = static_cast<int>((seconds - hours * 3600) / 60);
+            int secs = static_cast<int>(seconds) % 60;
+            
+            if (hours > 0) {
+                return std::format("{:02d}:{:02d}:{:02d}", hours, minutes, secs);
+            } else {
+                return std::format("{:02d}:{:02d}", minutes, secs);
+            }
+        }
+
+        /**
+         * [功能描述]：重置训练计时器（用于新的训练会话）
+         */
+        void resetTiming() {
+            total_training_time_ = std::chrono::duration<double>{0.0};
+            current_session_time_ = std::chrono::duration<double>{0.0};
+            is_timing_ = false;
+            is_paused_ = false;
         }
         
         /**

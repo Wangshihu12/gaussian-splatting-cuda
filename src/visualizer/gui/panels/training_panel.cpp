@@ -181,28 +181,100 @@ namespace gs::gui::panels {
         ImGui::Text("损失值: %.6f", response.current_loss);
 
         // =============================================================================
-        // 新增功能：训练时间显示
+        // 训练时间显示（修改后的实现）
         // =============================================================================
-        // 注意：需要通过事件系统获取TrainingInfo，或者通过ctx访问
-        // 这里假设我们可以通过某种方式访问到training_info
         if (auto* viewer = ctx.viewer) {  // 检查UIContext是否有viewer指针
             if (auto training_info = viewer->getTrainingInfo()) {  // 获取训练信息对象
                 
-                // 只有在有训练时间时才显示时间信息
-                if (training_info->getCurrentTrainingTimeSeconds() > 0) {
-                    // 显示格式化的训练时间（HH:MM:SS 或 MM:SS 格式）
-                    ImGui::Text("训练时间: %s", training_info->formatTrainingTime().c_str());
+                // 根据训练状态显示相应的时间信息
+                std::string time_text;
+                std::string status_text;
+                ImVec4 status_color;
+                
+                switch (response.state) {
+                case events::query::TrainerState::State::Idle:
+                case events::query::TrainerState::State::Ready:
+                    // 未开始训练：显示00:00
+                    time_text = "00:00";
+                    status_text = "未开始";
+                    status_color = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);  // 灰色
+                    break;
                     
-                    // 在同一行显示训练状态指示器
-                    ImGui::SameLine();
-                    if (response.state == events::query::TrainerState::State::Running) {
-                        // 运行状态：绿色圆点和"训练中"文字
-                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "● 训练中");
-                    } else if (response.state == events::query::TrainerState::State::Paused) {
-                        // 暂停状态：黄色暂停符号和"已暂停"文字
-                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "⏸ 已暂停");
+                case events::query::TrainerState::State::Running:
+                    // 正在训练：显示当前训练时间
+                    {
+                        double current_seconds = training_info->getCurrentTrainingTimeSeconds();
+                        if (current_seconds > 0) {
+                            time_text = training_info->formatTrainingTime();
+                        } else {
+                            time_text = "00:00";
+                        }
+                        status_text = "● 训练中";
+                        status_color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);  // 绿色
                     }
+                    break;
+                    
+                case events::query::TrainerState::State::Paused:
+                    // 暂停状态：显示暂停时的累计时间
+                    {
+                        double total_seconds = training_info->getTotalTrainingTimeSeconds();
+                        if (total_seconds > 0) {
+                            // 使用自定义格式化函数显示暂停时的时间
+                            int hours = static_cast<int>(total_seconds / 3600);
+                            int minutes = static_cast<int>((total_seconds - hours * 3600) / 60);
+                            int secs = static_cast<int>(total_seconds) % 60;
+                            
+                            if (hours > 0) {
+                                time_text = std::format("{:02d}:{:02d}:{:02d}", hours, minutes, secs);
+                            } else {
+                                time_text = std::format("{:02d}:{:02d}", minutes, secs);
+                            }
+                        } else {
+                            time_text = "00:00";
+                        }
+                        status_text = "⏸ 已暂停";
+                        status_color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);  // 黄色
+                    }
+                    break;
+                    
+                case events::query::TrainerState::State::Completed:
+                    // 训练完成：显示最终总训练时间
+                    {
+                        // 使用最终时间，不包含当前正在运行的时间
+                        double total_seconds = training_info->getTotalTrainingTimeSeconds();
+                        if (total_seconds > 0) {
+                            // 使用专门的格式化方法显示最终时间
+                            time_text = training_info->formatFinalTrainingTime();
+                        } else {
+                            time_text = "00:00";
+                        }
+                        status_text = "✓ 已完成";
+                        status_color = ImVec4(0.2f, 0.8f, 0.2f, 1.0f);  // 绿色
+                    }
+                    break;
+                    
+                case events::query::TrainerState::State::Error:
+                    // 训练错误：显示错误前的累计时间
+                    {
+                        // 使用最终时间，不包含当前正在运行的时间
+                        double total_seconds = training_info->getTotalTrainingTimeSeconds();
+                        if (total_seconds > 0) {
+                            time_text = training_info->formatFinalTrainingTime();
+                        } else {
+                            time_text = "00:00";
+                        }
+                        status_text = "✗ 错误";
+                        status_color = ImVec4(1.0f, 0.3f, 0.3f, 1.0f);  // 红色
+                    }
+                    break;
                 }
+                
+                // 显示训练时间（一直显示）
+                ImGui::Text("训练时间: %s", time_text.c_str());
+                
+                // 在同一行显示训练状态指示器
+                ImGui::SameLine();
+                ImGui::TextColored(status_color, "%s", status_text.c_str());
             }
         }
     }

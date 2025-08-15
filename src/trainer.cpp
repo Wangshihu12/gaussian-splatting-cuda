@@ -300,7 +300,7 @@ namespace gs {
         // CUDA环境验证
         // =============================================================================
         if (!torch::cuda::is_available()) {
-            throw std::runtime_error("CUDA is not available – aborting.");
+            throw std::runtime_error("CUDA不可用 – 中止。");
         }
 
         // =============================================================================
@@ -321,7 +321,7 @@ namespace gs {
                 CameraDataset::Split::VAL        // 验证集标记
             );
 
-            std::println("Created train/val split: {} train, {} val images",
+            std::println("创建了训练/验证集: {} 训练, {} 验证图像",
                          train_dataset_->size().value(),
                          val_dataset_->size().value());
         } else {
@@ -330,7 +330,7 @@ namespace gs {
             train_dataset_ = dataset;
             val_dataset_ = nullptr;
 
-            std::println("Using all {} images for training (no evaluation)",
+            std::println("使用所有{}图像进行训练（无评估）",
                          train_dataset_->size().value());
         }
 
@@ -392,9 +392,9 @@ namespace gs {
         // 配置信息输出
         // =============================================================================
         // 打印关键的训练配置信息，便于调试和日志记录
-        std::println("Render mode: {}", params.optimization.render_mode);
-        std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
-        std::println("Strategy: {}", params.optimization.strategy);
+        std::println("渲染模式: {}", params.optimization.render_mode);
+        std::println("可视化: {}", params.optimization.headless ? "禁用" : "启用");
+        std::println("策略: {}", params.optimization.strategy);
     }
 
     /**
@@ -478,8 +478,8 @@ namespace gs {
             }
             
             // 输出暂停信息，提供用户反馈
-            std::println("\nTraining paused at iteration {}", iter);
-            std::println("Click 'Resume Training' to continue.");
+            std::println("\n训练暂停在迭代 {}", iter);
+            std::println("点击'继续训练'以继续。");
             
         // 检查恢复请求：用户取消暂停请求且训练当前已暂停
         } else if (!pause_requested_.load() && is_paused_.load()) {
@@ -496,7 +496,7 @@ namespace gs {
             }
             
             // 输出恢复信息
-            std::println("\nTraining resumed at iteration {}", iter);
+            std::println("\n训练恢复在迭代 {}", iter);
         }
 
         // =============================================================================
@@ -505,7 +505,7 @@ namespace gs {
         // 使用exchange操作原子性地检查并重置保存标志
         // exchange(false)返回原值并设置为false，避免重复保存
         if (save_requested_.exchange(false)) {
-            std::println("\nSaving checkpoint at iteration {}...", iter);
+            std::println("\n保存检查点在迭代 {}...", iter);
             
             // 构建检查点保存路径
             auto checkpoint_path = params_.dataset.output_path / "checkpoints";
@@ -514,7 +514,7 @@ namespace gs {
             // join=true表示等待保存操作完成后再继续
             strategy_->get_model().save_ply(checkpoint_path, iter, /*join=*/true);
             
-            std::println("Checkpoint saved to {}", checkpoint_path.string());
+            std::println("检查点保存到 {}", checkpoint_path.string());
 
             // 发射检查点保存完成事件
             // 这允许其他系统组件（如GUI）响应保存完成事件
@@ -529,8 +529,8 @@ namespace gs {
         // =============================================================================
         // 这是最终的停止操作，会保存模型并完全终止训练
         if (stop_requested_.load()) {
-            std::println("\nStopping training permanently at iteration {}...", iter);
-            std::println("Saving final model...");
+            std::println("\n永久停止训练在迭代 {}...", iter);
+            std::println("保存最终模型...");
             
             // 保存最终模型到输出目录
             // 这确保了即使训练被中断，也能保留当前的训练成果
@@ -573,11 +573,11 @@ namespace gs {
             // 检查相机是否有径向畸变参数
             if (cam->radial_distortion().numel() != 0 ||
                 cam->tangential_distortion().numel() != 0) {
-                return std::unexpected("Training on cameras with distortion is not supported yet.");
+                return std::unexpected("训练在有畸变的相机上不支持。");
             }
             // 检查相机模型类型，目前只支持针孔相机模型
             if (cam->camera_model_type() != gsplat::CameraModelType::PINHOLE) {
-                return std::unexpected("Training on cameras with non-pinhole model is not supported yet.");
+                return std::unexpected("训练在非针孔相机模型上不支持。");
             }
 
             // 更新当前迭代次数
@@ -916,7 +916,7 @@ namespace gs {
                     
                     // 检查CUDA函数调用是否成功
                     if (err != cudaSuccess) {
-                        std::cerr << "Warning: Failed to launch callback: " << cudaGetErrorString(err) << std::endl;
+                        std::cerr << "警告: 启动回调失败: " << cudaGetErrorString(err) << std::endl;
                         callback_busy_ = false; // 重置状态
                     }
                 }
@@ -953,7 +953,7 @@ namespace gs {
                 // 发射训练完成日志事件
                 events::notify::Log{
                     .level = events::notify::Log::Level::Info,
-                    .message = std::format("Training completed. Final model saved at iteration {}", iter - 1),
+                    .message = std::format("训练完成。最终模型保存在迭代 {}", iter - 1),
                     .source = "Trainer"
                 }.emit();
             }
@@ -988,7 +988,7 @@ namespace gs {
             // 异常处理：确保状态正确设置
             // =============================================================================
             is_running_ = false; // 即使出现异常也要正确设置状态
-            return std::unexpected(std::format("Training failed: {}", e.what()));
+            return std::unexpected(std::format("训练失败: {}", e.what()));
         }
     }
 
@@ -1014,7 +1014,7 @@ namespace gs {
         if (it == m_cam_id_to_cam.end()) {
             // 未找到指定ID的相机，输出错误信息
             // 这通常表示传入了无效的相机ID，可能是程序逻辑错误
-            std::cerr << "error: getCamById - could not find cam with cam id " << camId << std::endl;
+            std::cerr << "错误: getCamById - 找不到具有cam id的相机 " << camId << std::endl;
             return nullptr;  // 返回空指针表示查找失败
         }
         

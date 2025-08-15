@@ -28,7 +28,7 @@ namespace gs::loader {
         if (!loader) {
             // Build detailed error message
             std::string error_msg = std::format(
-                "No loader found for path: {}\n", path.string());
+                "没有找到加载器: {}\n", path.string());
 
             // Try all loaders to get diagnostic info
             error_msg += "Tried loaders:\n";

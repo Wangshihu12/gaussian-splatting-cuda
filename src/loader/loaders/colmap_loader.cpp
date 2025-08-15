@@ -20,11 +20,11 @@ namespace gs::loader {
 
         // Validate directory exists
         if (!std::filesystem::exists(path)) {
-            return std::unexpected(std::format("Path does not exist: {}", path.string()));
+            return std::unexpected(std::format("路径不存在: {}", path.string()));
         }
 
         if (!std::filesystem::is_directory(path)) {
-            return std::unexpected("COLMAP dataset must be a directory");
+            return std::unexpected("COLMAP数据集必须是目录");
         }
 
         // Report initial progress
