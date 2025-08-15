@@ -2,6 +2,7 @@
 #include "core/events.hpp"
 #include "gui/ui_widgets.hpp"
 #include <imgui.h>
+#include "visualizer_impl.hpp"
 
 /**
  * [文件描述]：训练控制面板实现文件
@@ -26,7 +27,7 @@ namespace gs::gui::panels {
         // =============================================================================
         // 面板标题和分隔线
         // =============================================================================
-        ImGui::Text("Training Control");    // 面板标题
+        ImGui::Text("训练控制");    // 面板标题
         ImGui::Separator();                 // 视觉分隔线
 
         // =============================================================================
@@ -61,7 +62,7 @@ namespace gs::gui::panels {
         // =============================================================================
         if (!has_response) {
             // 如果没有收到响应，说明训练器尚未加载或连接失败
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "未加载训练器");
             return;  // 提前返回，不显示控制按钮
         }
 
@@ -71,14 +72,14 @@ namespace gs::gui::panels {
         switch (response.state) {
         case events::query::TrainerState::State::Idle:
             // 训练器空闲状态：未加载任何训练数据
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No trainer loaded");
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "未加载训练器");
             break;
 
         case events::query::TrainerState::State::Ready:
             // 训练器就绪状态：已加载数据，可以开始训练
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));        // 绿色按钮
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));  // 悬停时的亮绿色
-            if (ImGui::Button("Start Training", ImVec2(-1, 0))) {  // 全宽按钮
+            if (ImGui::Button("开始训练", ImVec2(-1, 0))) {  // 全宽按钮
                 events::cmd::StartTraining{}.emit();              // 发送开始训练命令
             }
             ImGui::PopStyleColor(2);  // 恢复默认按钮颜色
@@ -88,7 +89,7 @@ namespace gs::gui::panels {
             // 训练器运行状态：正在进行训练
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));        // 橙色按钮
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.6f, 0.2f, 1.0f));  // 悬停时的亮橙色
-            if (ImGui::Button("Pause", ImVec2(-1, 0))) {          // 暂停按钮
+            if (ImGui::Button("暂停", ImVec2(-1, 0))) {          // 暂停按钮
                 events::cmd::PauseTraining{}.emit();             // 发送暂停训练命令
             }
             ImGui::PopStyleColor(2);
@@ -100,7 +101,7 @@ namespace gs::gui::panels {
             // 恢复训练按钮
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));        // 绿色
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
-            if (ImGui::Button("Resume", ImVec2(-1, 0))) {
+            if (ImGui::Button("恢复", ImVec2(-1, 0))) {
                 events::cmd::ResumeTraining{}.emit();            // 发送恢复训练命令
             }
             ImGui::PopStyleColor(2);
@@ -108,7 +109,7 @@ namespace gs::gui::panels {
             // 永久停止按钮
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.2f, 0.2f, 1.0f));        // 红色
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.3f, 0.3f, 1.0f));  // 悬停时的亮红色
-            if (ImGui::Button("Stop Permanently", ImVec2(-1, 0))) {
+            if (ImGui::Button("永久停止", ImVec2(-1, 0))) {
                 events::cmd::StopTraining{}.emit();              // 发送停止训练命令
             }
             ImGui::PopStyleColor(2);
@@ -116,12 +117,12 @@ namespace gs::gui::panels {
 
         case events::query::TrainerState::State::Completed:
             // 训练完成状态：训练已成功完成
-            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Training Complete!");
+            ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "训练完成!");
             break;
 
         case events::query::TrainerState::State::Error:
             // 训练错误状态：训练过程中发生了错误
-            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Training Error!");
+            ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "训练错误!");
             
             // 如果有错误消息，显示详细信息
             if (response.error_message) {
@@ -139,7 +140,7 @@ namespace gs::gui::panels {
             // 保存检查点按钮
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));        // 蓝色按钮
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));  // 悬停时的亮蓝色
-            if (ImGui::Button("Save Checkpoint", ImVec2(-1, 0))) {
+            if (ImGui::Button("保存检查点", ImVec2(-1, 0))) {
                 events::cmd::SaveCheckpoint{}.emit();            // 发送保存检查点命令
                 
                 // 启动保存进度反馈
@@ -159,7 +160,7 @@ namespace gs::gui::panels {
                                .count();
             
             if (elapsed < 2000) {  // 显示反馈信息2秒钟
-                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "Checkpoint saved!");
+                ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "检查点保存成功!");
             } else {
                 state.save_in_progress = false;  // 2秒后自动隐藏反馈信息
             }
@@ -171,13 +172,13 @@ namespace gs::gui::panels {
         ImGui::Separator();  // 分隔线，将控制按钮和状态信息分开
         
         // 显示当前训练器状态的文字描述
-        ImGui::Text("Status: %s", widgets::GetTrainerStateString(static_cast<int>(response.state)));
+        ImGui::Text("状态: %s", widgets::GetTrainerStateString(static_cast<int>(response.state)));
         
         // 显示当前训练迭代次数
-        ImGui::Text("Iteration: %d", response.current_iteration);
+        ImGui::Text("迭代次数: %d", response.current_iteration);
         
         // 显示当前损失值（保留6位小数精度）
-        ImGui::Text("Loss: %.6f", response.current_loss);
+        ImGui::Text("损失值: %.6f", response.current_loss);
 
         // =============================================================================
         // 新增功能：训练时间显示

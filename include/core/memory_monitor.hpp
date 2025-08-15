@@ -66,7 +66,7 @@ namespace gs {
                 events::notify::MemoryWarning{
                     .type = events::notify::MemoryWarning::Type::GPU,
                     .usage_percent = gpu_percent,
-                    .message = "GPU memory usage critical! Consider reducing batch size or number of Gaussians."}
+                    .message = "GPU 内存使用严重! 考虑减少批量大小或高斯数量."}
                     .emit();
                 gpu_warning_sent_ = true;
             } else if (gpu_percent < 85.0f) {

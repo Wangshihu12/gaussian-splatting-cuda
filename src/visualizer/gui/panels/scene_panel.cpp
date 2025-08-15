@@ -56,11 +56,11 @@ namespace gs::gui {
         // Make buttons smaller to fit the narrow panel
         float button_width = ImGui::GetContentRegionAvail().x;
 
-        if (ImGui::Button("Open File Browser", ImVec2(button_width, 0))) {
+        if (ImGui::Button("打开文件浏览器", ImVec2(button_width, 0))) {
             // Request to show file browser
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
-                .message = "Opening file browser...",
+                .message = "打开文件浏览器...",
                 .source = "ScenePanel"}
                 .emit();
 
@@ -70,7 +70,7 @@ namespace gs::gui {
             }
         }
 
-        if (ImGui::Button("Refresh", ImVec2(button_width * 0.48f, 0))) {
+        if (ImGui::Button("刷新", ImVec2(button_width * 0.48f, 0))) {
             if (!m_currentDatasetPath.empty()) {
                 loadImageCams(m_currentDatasetPath);
             }
@@ -78,7 +78,7 @@ namespace gs::gui {
 
         ImGui::SameLine();
 
-        if (ImGui::Button("Clear", ImVec2(button_width * 0.48f, 0))) {
+        if (ImGui::Button("清空", ImVec2(button_width * 0.48f, 0))) {
             // Clear the image list
             m_imagePaths.clear();
             m_selectedImageIndex = -1;
@@ -90,7 +90,7 @@ namespace gs::gui {
             // Log the action
             events::notify::Log{
                 .level = events::notify::Log::Level::Info,
-                .message = "Scene cleared",
+                .message = "场景清空",
                 .source = "ScenePanel"}
                 .emit();
         }
@@ -101,7 +101,7 @@ namespace gs::gui {
         ImGui::BeginChild("ImageList", ImVec2(0, 0), true);
 
         if (!m_imagePaths.empty()) {
-            ImGui::Text("Images (%zu):", m_imagePaths.size());
+            ImGui::Text("图片 (%zu):", m_imagePaths.size());
             ImGui::Separator();
 
             for (size_t i = 0; i < m_imagePaths.size(); ++i) {
@@ -127,7 +127,7 @@ namespace gs::gui {
                 // Context menu for right-click - use unique ID
                 std::string context_menu_id = std::format("context_menu_{}", i);
                 if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {
-                    if (ImGui::MenuItem("Go to Cam View")) {
+                    if (ImGui::MenuItem("转到相机视图")) {
                         // Get the camera data for this image
                         auto cam_data_it = m_PathToCamId.find(imagePath);
                         if (cam_data_it != m_PathToCamId.end()) {
@@ -139,7 +139,7 @@ namespace gs::gui {
                             // Log the action
                             events::notify::Log{
                                 .level = events::notify::Log::Level::Info,
-                                .message = std::format("Going to camera view for: {} (Camera ID: {})",
+                                .message = std::format("转到相机视图: {} (相机ID: {})",
                                                        imagePath.filename().string(),
                                                        cam_data_it->second),
                                 .source = "ScenePanel"}
@@ -148,7 +148,7 @@ namespace gs::gui {
                             // Log warning if camera data not found
                             events::notify::Log{
                                 .level = events::notify::Log::Level::Warning,
-                                .message = std::format("Camera data not found for: {}", imagePath.filename().string()),
+                                .message = std::format("相机数据未找到: {}", imagePath.filename().string()),
                                 .source = "ScenePanel"}
                                 .emit();
                         }
@@ -164,8 +164,8 @@ namespace gs::gui {
                 // }
             }
         } else {
-            ImGui::Text("No images loaded.");
-            ImGui::Text("Use 'Open File Browser' to load a dataset.");
+            ImGui::Text("没有加载图片.");
+            ImGui::Text("使用 '打开文件浏览器' 加载数据集.");
         }
 
         ImGui::EndChild();
@@ -187,7 +187,7 @@ namespace gs::gui {
         m_selectedImageIndex = -1;
 
         if (!m_trainer_manager) {
-            std::cerr << "m_trainer_manager was not set" << std::endl;
+            std::cerr << "m_trainer_manager 未设置" << std::endl;
             return;
         }
 
@@ -206,7 +206,7 @@ namespace gs::gui {
         // Log the action
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
-            .message = std::format("Loaded {} images from dataset: {}", m_imagePaths.size(), path.string()),
+            .message = std::format("加载 {} 张图片从数据集: {}", m_imagePaths.size(), path.string()),
             .source = "ScenePanel"}
             .emit();
     }
@@ -219,7 +219,7 @@ namespace gs::gui {
         // Log selection
         events::notify::Log{
             .level = events::notify::Log::Level::Debug,
-            .message = std::format("Selected image: {}", imagePath.filename().string()),
+            .message = std::format("选中图片: {}", imagePath.filename().string()),
             .source = "ScenePanel"}
             .emit();
 
@@ -247,7 +247,7 @@ namespace gs::gui {
         // Log the action
         events::notify::Log{
             .level = events::notify::Log::Level::Info,
-            .message = std::format("Opening image preview: {}", imagePath.filename().string()),
+            .message = std::format("打开图片预览: {}", imagePath.filename().string()),
             .source = "ScenePanel"}
             .emit();
     }

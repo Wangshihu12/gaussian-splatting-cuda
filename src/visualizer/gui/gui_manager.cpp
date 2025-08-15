@@ -66,8 +66,20 @@ namespace gs::gui {
 
         // Load fonts
         std::string font_path = std::string(PROJECT_ROOT_PATH) +
-                                "/src/visualizer/resources/assets/JetBrainsMono-Regular.ttf";
-        io.Fonts->AddFontFromFileTTF(font_path.c_str(), 14.0f);
+                                "/src/visualizer/resources/assets/NotoSerifSC-Bold.otf";
+        // 配置中文字符范围
+        static const ImWchar chinese_ranges[] = {
+            0x0020, 0x00FF, // 基本拉丁字符
+            0x2000, 0x206F, // 通用标点
+            0x3000, 0x30FF, // 中日韩符号和标点、平假名、片假名
+            0x31F0, 0x31FF, // 片假名表音扩展
+            0xFF00, 0xFFEF, // 半角及全角形式
+            0x4e00, 0x9FAF, // 中日韩统一表意文字（常用汉字）
+            0,
+        };
+        
+        // 加载字体并指定中文字符范围
+        io.Fonts->AddFontFromFileTTF(font_path.c_str(), 14.0f, NULL, chinese_ranges);
 
         applyDefaultStyle();
 
@@ -160,7 +172,7 @@ namespace gs::gui {
             ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.2f, nullptr, &dockspace_id);
 
             // Dock windows
-            ImGui::DockBuilderDockWindow("Rendering Settings", dock_id_left);
+            ImGui::DockBuilderDockWindow("渲染设置", dock_id_left);
             ImGui::DockBuilderDockWindow("Scene", dock_id_right);
 
             ImGui::DockBuilderFinish(dockspace_id);
@@ -178,7 +190,7 @@ namespace gs::gui {
         // Draw docked panels
         if (show_main_panel_) {
             ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.5f, 0.5f, 0.5f, 0.8f));
-            if (ImGui::Begin("Rendering Settings", &show_main_panel_)) {
+            if (ImGui::Begin("渲染设置", &show_main_panel_)) {
                 // Draw contents without the manual sizing/positioning
                 panels::DrawWindowControls(ctx);
                 ImGui::Separator();
@@ -291,7 +303,7 @@ namespace gs::gui {
         float bottom = main_viewport->WorkSize.y;
 
         // Find our docked windows and calculate the remaining space
-        ImGuiWindow* settings_window = ImGui::FindWindowByName("Rendering Settings");
+        ImGuiWindow* settings_window = ImGui::FindWindowByName("渲染设置");
         ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene");
 
         if (settings_window && settings_window->DockNode && settings_window->Active) {

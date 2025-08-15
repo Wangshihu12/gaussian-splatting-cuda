@@ -33,7 +33,7 @@ namespace gs::gui::panels {
     void DrawCropBoxControls(const UIContext& ctx) {
         auto& state = CropBoxState::getInstance();
 
-        if (!ImGui::CollapsingHeader("Crop Box")) {
+        if (!ImGui::CollapsingHeader("裁剪框")) {
             return;
         }
 
@@ -41,13 +41,13 @@ namespace gs::gui::panels {
         if (!crop_box)
             return;
 
-        ImGui::Checkbox("Show Crop Box", &state.show_crop_box);
-        ImGui::Checkbox("Use Crop Box", &state.use_crop_box);
+        ImGui::Checkbox("显示裁剪框", &state.show_crop_box);
+        ImGui::Checkbox("使用裁剪框", &state.use_crop_box);
 
         if (state.show_crop_box && crop_box->isInitialized()) {
             // Appearance controls
             static float bbox_color[3] = {1.0f, 1.0f, 0.0f};
-            if (ImGui::ColorEdit3("Box Color", bbox_color)) {
+            if (ImGui::ColorEdit3("框颜色", bbox_color)) {
                 crop_box->setColor(glm::vec3(bbox_color[0], bbox_color[1], bbox_color[2]));
             }
 
@@ -57,19 +57,19 @@ namespace gs::gui::panels {
             float slider_width = available_width - button_width - ImGui::GetStyle().ItemSpacing.x;
 
             ImGui::SetNextItemWidth(slider_width);
-            if (ImGui::SliderFloat("Line Width", &line_width, 0.5f, 10.0f)) {
+            if (ImGui::SliderFloat("线宽", &line_width, 0.5f, 10.0f)) {
                 crop_box->setLineWidth(line_width);
             }
 
-            if (ImGui::Button("Reset to Default")) {
+            if (ImGui::Button("重置为默认")) {
                 crop_box->setBounds(glm::vec3(-1.0f), glm::vec3(1.0f));
                 crop_box->setworld2BBox(geometry::EuclideanTransform());
             }
 
             // Rotation controls
             if (ImGui::TreeNode("Rotation")) {
-                ImGui::Text("Ctrl+click for faster steps");
-                ImGui::Text("Rotation around crop box axes:");
+                ImGui::Text("Ctrl+点击加速");
+                ImGui::Text("围绕裁剪框轴旋转:");
 
                 const float rotation_step = 1.0f;
                 const float rotation_step_fast = 15.0f;
@@ -84,9 +84,9 @@ namespace gs::gui::panels {
                 float diff_x = 0, diff_y = 0, diff_z = 0;
 
                 // X-axis rotation
-                ImGui::Text("X-axis:");
+                ImGui::Text("X轴:");
                 ImGui::SameLine();
-                ImGui::Text("RotX");
+                ImGui::Text("旋转X");
 
                 if (ImGui::ArrowButton("##RotX_Up", ImGuiDir_Up)) {
                     diff_x = step;
@@ -114,9 +114,9 @@ namespace gs::gui::panels {
                 }
 
                 // Y-axis rotation
-                ImGui::Text("Y-axis:");
+                ImGui::Text("Y轴:");
                 ImGui::SameLine();
-                ImGui::Text("RotY");
+                ImGui::Text("旋转Y");
 
                 if (ImGui::ArrowButton("##RotY_Up", ImGuiDir_Up)) {
                     diff_y = step;
@@ -144,9 +144,9 @@ namespace gs::gui::panels {
                 }
 
                 // Z-axis rotation
-                ImGui::Text("Z-axis:");
+                ImGui::Text("Z轴:");
                 ImGui::SameLine();
-                ImGui::Text("RotZ");
+                ImGui::Text("旋转Z");
 
                 if (ImGui::ArrowButton("##RotZ_Up", ImGuiDir_Up)) {
                     diff_z = step;
@@ -195,8 +195,8 @@ namespace gs::gui::panels {
                 const float bound_step = 0.01f;
                 const float bound_step_fast = 0.1f;
 
-                ImGui::Text("Ctrl+click for faster steps");
-                ImGui::Text("Min Bounds:");
+                ImGui::Text("Ctrl+点击加速");
+                ImGui::Text("最小边界:");
 
                 // Min bounds
                 ImGui::Text("X:");
@@ -221,7 +221,7 @@ namespace gs::gui::panels {
                 min_bounds[2] = std::min(min_bounds[2], max_bounds[2]);
 
                 ImGui::Separator();
-                ImGui::Text("Max Bounds:");
+                ImGui::Text("最大边界:");
 
                 // Max bounds
                 ImGui::Text("X:");
@@ -255,8 +255,8 @@ namespace gs::gui::panels {
                 glm::vec3 center = crop_box->getCenter();
                 glm::vec3 size = crop_box->getSize();
 
-                ImGui::Text("Center: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
-                ImGui::Text("Size: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
+                ImGui::Text("中心: (%.3f, %.3f, %.3f)", center.x, center.y, center.z);
+                ImGui::Text("大小: (%.3f, %.3f, %.3f)", size.x, size.y, size.z);
 
                 ImGui::TreePop();
             }

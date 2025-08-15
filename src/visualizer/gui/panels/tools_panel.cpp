@@ -20,14 +20,14 @@ namespace gs::gui::panels {
         }
 
         // Tools section header
-        ImGui::Text("Tools");
+        ImGui::Text("工具");
         ImGui::Separator();
 
         // Get all active tools
         auto tools = tool_manager->getActiveTools();
 
         if (tools.empty()) {
-            ImGui::TextDisabled("No tools available");
+            ImGui::TextDisabled("没有可用的工具");
             ImGui::Spacing();
             return;
         }
@@ -63,7 +63,7 @@ namespace gs::gui::panels {
 
                     events::notify::Log{
                         .level = events::notify::Log::Level::Info,
-                        .message = std::format("Enabled tool: {}", tool->getName()),
+                        .message = std::format("启用工具: {}", tool->getName()),
                         .source = "ToolsPanel"}
                         .emit();
                 } else {
@@ -73,7 +73,7 @@ namespace gs::gui::panels {
 
                     events::notify::Log{
                         .level = events::notify::Log::Level::Info,
-                        .message = std::format("Disabled tool: {}", tool->getName()),
+                        .message = std::format("禁用工具: {}", tool->getName()),
                         .source = "ToolsPanel"}
                         .emit();
                 }
@@ -124,7 +124,7 @@ namespace gs::gui::panels {
 
                 // Add additional info
                 ImGui::Separator();
-                ImGui::TextDisabled("Status: %s", enabled ? "Enabled" : "Disabled");
+                ImGui::TextDisabled("状态: %s", enabled ? "启用" : "禁用");
 
                 ImGui::EndTooltip();
             }
@@ -137,11 +137,11 @@ namespace gs::gui::panels {
         const char* GetToolIcon(const std::string_view& tool_name) {
             // Map tool names to icons
             // Using simple text icons for now, but could use FontAwesome or similar
-            if (tool_name == "Crop Box") {
+            if (tool_name == "裁剪框") {
                 return "[□]"; // Box icon
-            } else if (tool_name == "World Transform") {
+            } else if (tool_name == "世界坐标系变换") {
                 return "[⊕]"; // Transform icon
-            } else if (tool_name == "Background") {
+            } else if (tool_name == "背景") {
                 return "[◐]"; // Background/color icon
             }
 

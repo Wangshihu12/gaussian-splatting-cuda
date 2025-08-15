@@ -150,7 +150,7 @@ namespace gs::loader {
             // Prefetching based on file size
             if (size > ply_constants::FILE_SIZE_THRESHOLD_MB * 1024 * 1024) { // Only for files > 50MB
                 if (madvise(data, size, MADV_SEQUENTIAL) == 0) {
-                    std::println("Applied sequential access optimization");
+                    std::println("已应用顺序访问优化");
                 }
             }
 
@@ -168,14 +168,14 @@ namespace gs::loader {
 
         // Check for PLY magic with both Unix and Windows line endings
         if (file_size < ply_constants::PLY_MIN_SIZE) {
-            return std::unexpected("File too small to be valid PLY");
+            return std::unexpected("文件太小，无法成为有效的PLY");
         }
 
         bool has_crlf = false;
         if (std::strncmp(data, "ply\r\n", 5) == 0) {
             has_crlf = true;
         } else if (std::strncmp(data, "ply\n", 4) != 0) {
-            return std::unexpected("Invalid PLY file - missing PLY header");
+            return std::unexpected("无效的PLY文件 - 缺少PLY头");
         }
 
         const char* ptr = data + (has_crlf ? 5 : 4);
@@ -218,7 +218,7 @@ namespace gs::loader {
 
             // Progress reporting for large headers
             if (lines_parsed % 1000 == 0) {
-                std::println("  Parsed {} header lines...", lines_parsed);
+                std::println("  已解析 {} 行头信息...", lines_parsed);
             }
 
             // Ultra-fast line parsing with minimal allocations
@@ -276,19 +276,19 @@ namespace gs::loader {
                 layout.vertex_stride += 4; // All properties are float32
             } else if (line_len >= 10 && std::strncmp(line_start, "end_header", 10) == 0) {
                 if (!is_binary || !found_vertex) {
-                    return std::unexpected("Only binary PLY with position supported");
+                    return std::unexpected("仅支持位置的二进制PLY");
                 }
-                std::println("Header parsed - {} lines, stride: {} bytes, dc: {}, rest: {}",
+                std::println("头信息解析完成 - {} 行, 步长: {} 字节, dc: {}, rest: {}",
                              lines_parsed, layout.vertex_stride, layout.dc_count, layout.rest_count);
                 return std::make_pair(ptr - data, layout);
             }
         }
 
         if (lines_parsed >= MAX_HEADER_LINES) {
-            return std::unexpected(std::format("Header too large - exceeded {} lines", MAX_HEADER_LINES));
+            return std::unexpected(std::format("头信息太大 - 超过 {} 行", MAX_HEADER_LINES));
         }
 
-        return std::unexpected("No end_header found in PLY file");
+        return std::unexpected("未找到 end_header 在 PLY 文件中");
     }
 
     // SIMD position extraction
@@ -300,7 +300,7 @@ namespace gs::loader {
         if (!layout.has_positions())
             return;
 
-        std::println("Position extraction using TBB + SIMD for {} Gaussians", count);
+        std::println("使用 TBB + SIMD 提取位置 - {} 高斯", count);
 
 #ifdef HAS_AVX2_SUPPORT
         // Thread-safe AVX2 detection using std::once_flag
@@ -321,7 +321,7 @@ namespace gs::loader {
         });
 
         if (has_avx2) {
-            std::println("Using AVX2 SIMD acceleration");
+            std::println("使用 AVX2 SIMD 加速");
 
             // TBB parallel SIMD processing with larger blocks to reduce overhead
             tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
@@ -401,7 +401,7 @@ namespace gs::loader {
         } else
 #endif
         {
-            std::println("Using optimized scalar processing");
+            std::println("使用优化后的标量处理");
 
             // TBB parallel scalar processing
             tbb::parallel_for(tbb::blocked_range<size_t>(0, count, ply_constants::BLOCK_SIZE_LARGE),
@@ -471,13 +471,13 @@ namespace gs::loader {
             auto start_time = std::chrono::high_resolution_clock::now();
 
             if (!std::filesystem::exists(filepath)) {
-                return std::unexpected(std::format("PLY file does not exist: {}", filepath.string()));
+                return std::unexpected(std::format("PLY 文件不存在: {}", filepath.string()));
             }
 
             // Memory map
             MMappedFile mapped_file;
             if (!mapped_file.map(filepath)) {
-                return std::unexpected("Failed to memory map PLY file");
+                return std::unexpected("内存映射 PLY 文件失败");
             }
 
             const char* data = static_cast<const char*>(mapped_file.data);
@@ -492,7 +492,7 @@ namespace gs::loader {
             auto [data_offset, layout] = parse_result.value();
             const char* vertex_data = data + data_offset;
 
-            std::println("⚡ Extracting {} Gaussians with blazing speed", layout.vertex_count);
+            std::println("⚡ 提取 {} 高斯 with 超快速度", layout.vertex_count);
 
             auto options = torch::TensorOptions().dtype(torch::kFloat32);
 
@@ -588,7 +588,7 @@ namespace gs::loader {
             auto end_time = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-            std::println("🔥 BLAZING FAST COMPLETE: file size {} MB, {} Gaussians with SH degree {} in {}ms! 🔥",
+            std::println("🔥 超快完成: 文件大小 {} MB, {} 高斯 with SH 阶数 {} 在 {}ms! 🔥",
                          file_size / (1024 * 1024), layout.vertex_count, sh_degree, duration.count());
 
             return SplatData(
@@ -602,7 +602,7 @@ namespace gs::loader {
                 ply_constants::SCENE_SCALE_FACTOR);
 
         } catch (const std::exception& e) {
-            return std::unexpected(std::format("Failed to load PLY file: {}", e.what()));
+            return std::unexpected(std::format("加载 PLY 文件失败: {}", e.what()));
         }
     }
 

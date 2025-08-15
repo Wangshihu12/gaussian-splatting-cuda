@@ -19,9 +19,9 @@ namespace gs::gui::panels {
                                  ImGuiWindowFlags_NoCollapse |
                                  ImGuiWindowFlags_NoTitleBar; // Add this to remove title bar
 
-        if (ImGui::Begin("Rendering Setting", nullptr, flags)) {
+        if (ImGui::Begin("渲染设置", nullptr, flags)) {
             // Add a custom title
-            ImGui::Text("Rendering Settings");
+            ImGui::Text("渲染设置");
             ImGui::Separator();
 
             DrawWindowControls(ctx);
@@ -49,19 +49,19 @@ namespace gs::gui::panels {
     }
 
     void DrawWindowControls(const UIContext& ctx) {
-        if (ImGui::Button("Open Scripting Console", ImVec2(-1, 0))) {
+        if (ImGui::Button("打开脚本控制台", ImVec2(-1, 0))) {
             (*ctx.window_states)["console"] = true;
         }
 
-        if (ImGui::Button("Open Camera Controls", ImVec2(-1, 0))) {
+        if (ImGui::Button("打开相机控制", ImVec2(-1, 0))) {
             (*ctx.window_states)["camera_controls"] = true;
         }
 
         ImGui::Separator();
         ImGui::Text("Windows");
-        ImGui::Checkbox("Scripting Console", &(*ctx.window_states)["console"]);
-        ImGui::Checkbox("Camera Controls", &(*ctx.window_states)["camera_controls"]);
-        ImGui::Checkbox("Scene Panel", &(*ctx.window_states)["scene_panel"]);
+        ImGui::Checkbox("脚本控制台", &(*ctx.window_states)["console"]);
+        ImGui::Checkbox("相机控制", &(*ctx.window_states)["camera_controls"]);
+        ImGui::Checkbox("场景面板", &(*ctx.window_states)["scene_panel"]);
     }
 
     void DrawRenderingSettings(const UIContext& ctx) {
@@ -69,7 +69,7 @@ namespace gs::gui::panels {
         if (!config)
             return;
 
-        ImGui::Text("Rendering Settings");
+        ImGui::Text("渲染设置");
         ImGui::Separator();
 
         // Get current render settings
@@ -81,7 +81,7 @@ namespace gs::gui::panels {
         bool settings_changed = false;
 
         // Point Cloud Mode checkbox
-        if (ImGui::Checkbox("Point Cloud Mode", &settings.point_cloud_mode)) {
+        if (ImGui::Checkbox("点云模式", &settings.point_cloud_mode)) {
             settings_changed = true;
             // Emit point cloud mode changed event
             events::ui::PointCloudModeChanged{
@@ -92,7 +92,7 @@ namespace gs::gui::panels {
 
         // Show voxel size slider only when in point cloud mode
         if (settings.point_cloud_mode) {
-            if (widgets::SliderWithReset("Voxel Size", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
+            if (widgets::SliderWithReset("体素大小", &settings.voxel_size, 0.001f, 0.1f, 0.01f)) {
                 settings_changed = true;
                 // Emit point cloud mode changed event with new voxel size
                 events::ui::PointCloudModeChanged{
@@ -150,16 +150,16 @@ namespace gs::gui::panels {
 
             // Add tooltip
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Toggle Vertical Synchronization\n%s",
-                                  vsync_enabled ? "FPS capped to monitor refresh rate"
-                                                : "Uncapped FPS");
+                ImGui::SetTooltip("切换垂直同步\n%s",
+                                  vsync_enabled ? "FPS 限制为显示器刷新率"
+                                                : "FPS 不限制");
             }
         }
 
 #ifdef CUDA_GL_INTEROP_ENABLED
-        ImGui::Text("Render Mode: GPU Direct (Interop)");
+        ImGui::Text("渲染模式: GPU Direct (Interop)");
 #else
-        ImGui::Text("Render Mode: CPU Copy");
+        ImGui::Text("渲染模式: CPU Copy");
 #endif
     }
 
@@ -202,6 +202,6 @@ namespace gs::gui::panels {
                                   min_val, max_val, loss_label);
         }
 
-        ImGui::Text("num Splats: %d", num_splats);
+        ImGui::Text("splats 数量: %d", num_splats);
     }
 } // namespace gs::gui::panels
