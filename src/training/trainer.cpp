@@ -37,31 +37,48 @@ namespace gs::training {
         }
     }
 
+    /**
+     * [功能描述]：计算光度损失函数，结合L1损失和SSIM损失来评估渲染图像与真实图像之间的差异
+     * @param render_output 渲染输出结果，包含生成的图像
+     * @param gt_image 真实图像（ground truth），用于比较的参考图像
+     * @param splatData 样条数据，包含高斯样条的参数信息
+     * @param opt_params 优化参数，包含损失函数的权重配置
+     * @return 返回损失值张量，如果计算失败则返回错误信息
+     */
     std::expected<torch::Tensor, std::string> Trainer::compute_photometric_loss(
         const RenderOutput& render_output,
         const torch::Tensor& gt_image,
         const SplatData& splatData,
         const param::OptimizationParameters& opt_params) {
         try {
-            // Ensure images have same dimensions
-            torch::Tensor rendered = render_output.image;
-            torch::Tensor gt = gt_image;
+            // 确保图像具有相同的尺寸
+            torch::Tensor rendered = render_output.image;  // 获取渲染输出的图像
+            torch::Tensor gt = gt_image;                   // 获取真实图像
 
-            // Ensure both tensors are 4D (batch, height, width, channels)
+            // 确保两个张量都是4维的（批次、高度、宽度、通道）
+            // 如果输入是3维（高度、宽度、通道），则在前面添加批次维度
             rendered = rendered.dim() == 3 ? rendered.unsqueeze(0) : rendered;
             gt = gt.dim() == 3 ? gt.unsqueeze(0) : gt;
 
+            // 检查渲染图像和真实图像的尺寸是否匹配
+            // 如果不匹配，抛出错误并显示详细的尺寸信息
             TORCH_CHECK(rendered.sizes() == gt.sizes(),
                         "ERROR: size mismatch – rendered ", rendered.sizes(),
                         " vs. ground truth ", gt.sizes());
 
-            // Base loss: L1 + SSIM
-            auto l1_loss = torch::l1_loss(rendered, gt);
-            auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);
+            // 基础损失计算：L1损失 + SSIM损失
+            auto l1_loss = torch::l1_loss(rendered, gt);  // 计算L1损失（平均绝对误差）
+            auto ssim_loss = 1.f - fused_ssim(rendered, gt, "valid", /*train=*/true);  // 计算SSIM损失（结构相似性）
+            
+            // 组合损失：使用lambda_dssim参数来平衡L1损失和SSIM损失
+            // lambda_dssim控制SSIM损失的权重，1-lambda_dssim控制L1损失的权重
             torch::Tensor loss = (1.f - opt_params.lambda_dssim) * l1_loss +
                                  opt_params.lambda_dssim * ssim_loss;
-            return loss;
+            
+            return loss;  // 返回计算得到的损失值
         } catch (const std::exception& e) {
+            // 异常处理：捕获任何计算过程中的异常
+            // 返回包含错误信息的unexpected对象，使用std::format格式化错误消息
             return std::unexpected(std::format("Error computing photometric loss: {}", e.what()));
         }
     }
@@ -107,88 +124,111 @@ namespace gs::training {
         }
     }
 
+    /**
+     * [功能描述]：训练器构造函数，负责初始化训练环境，包括数据集分割、策略初始化、双边网格设置、姿态优化模块等。
+     * @param dataset [参数说明]：相机数据集，包含所有训练图像和相机信息。
+     * @param strategy [参数说明]：训练策略，决定如何更新模型参数。
+     * @param params [参数说明]：训练参数，包含各种配置选项和超参数。
+     */
     Trainer::Trainer(std::shared_ptr<CameraDataset> dataset,
                      std::unique_ptr<IStrategy> strategy,
                      const param::TrainingParameters& params)
-        : strategy_(std::move(strategy)),
-          params_(params) {
+        : strategy_(std::move(strategy)),  // 移动策略对象
+          params_(params) {                // 复制训练参数
+        
+        // 检查CUDA可用性
         if (!torch::cuda::is_available()) {
             throw std::runtime_error("CUDA is not available – aborting.");
         }
 
-        // Handle dataset split based on evaluation flag
+        // 根据评估标志处理数据集分割
         if (params.optimization.enable_eval) {
-            // Create train/val split
+            // 创建训练/验证数据集分割
             train_dataset_ = std::make_shared<CameraDataset>(
-                dataset->get_cameras(), params.dataset, CameraDataset::Split::TRAIN);
+                dataset->get_cameras(), params.dataset, CameraDataset::Split::TRAIN);  // 训练集
             val_dataset_ = std::make_shared<CameraDataset>(
-                dataset->get_cameras(), params.dataset, CameraDataset::Split::VAL);
+                dataset->get_cameras(), params.dataset, CameraDataset::Split::VAL);    // 验证集
 
             std::println("Created train/val split: {} train, {} val images",
                          train_dataset_->size().value(),
                          val_dataset_->size().value());
         } else {
-            // Use all images for training
+            // 使用所有图像进行训练
             train_dataset_ = dataset;
-            val_dataset_ = nullptr;
+            val_dataset_ = nullptr;  // 无验证集
 
             std::println("Using all {} images for training (no evaluation)",
                          train_dataset_->size().value());
         }
 
+        // 记录训练数据集大小
         train_dataset_size_ = train_dataset_->size().value();
 
+        // 初始化训练策略
         strategy_->initialize(params.optimization);
 
-        // Initialize bilateral grid if enabled
+        // 如果启用，初始化双边网格
         if (auto result = initialize_bilateral_grid(); !result) {
             throw std::runtime_error(result.error());
         }
 
+        // 初始化背景颜色张量（黑色背景）
         background_ = torch::tensor({0.f, 0.f, 0.f},
                                     torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
+        
+        // 姿态优化模块初始化
         if (params.optimization.pose_optimization != "none") {
+            // 检查评估与姿态优化的兼容性
             if (params.optimization.enable_eval) {
                 throw std::runtime_error("Evaluating with pose optimization is not supported yet. "
                                          "Please disable pose optimization or evaluation.");
             }
+            // 检查GUT与姿态优化的兼容性
             if (params.optimization.gut) {
                 throw std::runtime_error("The 3DGUT rasterizer doesn't have camera gradients yet. "
                                          "Please disable pose optimization or disable gut.");
             }
+            
+            // 根据配置创建相应的姿态优化模块
             if (params.optimization.pose_optimization == "direct") {
+                // 直接姿态优化模块
                 poseopt_module_ = std::make_unique<DirectPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else if (params.optimization.pose_optimization == "mlp") {
+                // MLP姿态优化模块
                 poseopt_module_ = std::make_unique<MLPPoseOptimizationModule>(train_dataset_->get_cameras().size());
             } else {
                 throw std::runtime_error("Invalid pose optimization type: " + params.optimization.pose_optimization);
             }
+            
+            // 创建姿态优化器的Adam优化器，学习率为1e-5
             poseopt_optimizer_ = std::make_unique<torch::optim::Adam>(
                 std::vector<torch::Tensor>{poseopt_module_->parameters()},
                 torch::optim::AdamOptions(1e-5));
         } else {
+            // 如果不使用姿态优化，创建默认模块
             poseopt_module_ = std::make_unique<PoseOptimizationModule>();
         }
 
+        // 重新设置背景颜色张量并移动到CUDA设备
         background_ = torch::tensor({0.f, 0.f, 0.f}, torch::TensorOptions().dtype(torch::kFloat32));
         background_ = background_.to(torch::kCUDA);
 
-        // Create progress bar based on headless flag
-        if (params.optimization.headless) {
+        // 根据无头标志创建进度条
+        if (params_.optimization.headless) {
             progress_ = std::make_unique<TrainingProgress>(
-                params.optimization.iterations,
-                /*update_frequency=*/100);
+                params.optimization.iterations,  // 总迭代次数
+                /*update_frequency=*/100);      // 更新频率：每100次迭代更新一次
         }
 
-        // Initialize the evaluator - it handles all metrics internally
+        // 初始化评估器 - 它内部处理所有指标
         evaluator_ = std::make_unique<MetricsEvaluator>(params);
 
-        // setup camera cache
+        // 设置相机缓存：建立相机ID到相机对象的映射
         for (const auto& cam : dataset->get_cameras()) {
             m_cam_id_to_cam[cam->uid()] = cam;
         }
 
-        // Print render mode configuration
+        // 打印渲染模式配置信息
         std::println("Render mode: {}", params.optimization.render_mode);
         std::println("Visualization: {}", params.optimization.headless ? "disabled" : "enabled");
         std::println("Strategy: {}", params.optimization.strategy);
@@ -251,6 +291,15 @@ namespace gs::training {
         }
     }
 
+    /**
+     * [功能描述]：执行单个训练步骤，包括相机验证、渲染、损失计算、反向传播、优化器更新和模型保存等。
+     * @param iter [参数说明]：当前迭代次数。
+     * @param cam [参数说明]：当前训练使用的相机对象。
+     * @param gt_image [参数说明]：真实图像（ground truth），用于计算损失。
+     * @param render_mode [参数说明]：渲染模式，决定使用哪种渲染方法。
+     * @param stop_token [参数说明]：停止令牌，用于支持训练的中断和停止请求。
+     * @return [返回值说明]：返回StepResult枚举值（Continue或Stop），失败时返回错误字符串。
+     */
     std::expected<Trainer::StepResult, std::string> Trainer::train_step(
         int iter,
         Camera* cam,
@@ -258,11 +307,14 @@ namespace gs::training {
         RenderMode render_mode,
         std::stop_token stop_token) {
         try {
+            // 相机模型验证：根据GUT选项检查相机类型和畸变
             if (params_.optimization.gut) {
+                // GUT模式下不支持正交相机模型
                 if (cam->camera_model_type() == gsplat::CameraModelType::ORTHO) {
                     return std::unexpected("Training on cameras with ortho model is not supported yet.");
                 }
             } else {
+                // 非GUT模式下检查相机畸变和模型类型
                 if (cam->radial_distortion().numel() != 0 ||
                     cam->tangential_distortion().numel() != 0) {
                     return std::unexpected("You must use --gut option to train on cameras with distortion.");
@@ -272,45 +324,50 @@ namespace gs::training {
                 }
             }
 
+            // 更新当前迭代次数
             current_iteration_ = iter;
 
-            // Check control requests at the beginning
+            // 在开始时检查控制请求
             handle_control_requests(iter, stop_token);
 
-            // If stop requested, return Stop
+            // 如果请求停止，返回Stop
             if (stop_requested_.load() || stop_token.stop_requested()) {
                 return StepResult::Stop;
             }
 
-            // If paused, wait
+            // 如果暂停，等待恢复
             while (is_paused_.load() && !stop_requested_.load() && !stop_token.stop_requested()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));  // 100毫秒轮询间隔
                 handle_control_requests(iter, stop_token);
             }
 
-            // Check stop again after potential pause
+            // 暂停后再次检查停止请求
             if (stop_requested_.load() || stop_token.stop_requested()) {
                 return StepResult::Stop;
             }
 
+            // 应用姿态优化：调整相机位置
             auto adjusted_cam_pos = poseopt_module_->forward(cam->world_view_transform(), torch::tensor({cam->uid()}));
             auto adjusted_cam = Camera(*cam, adjusted_cam_pos);
 
+            // 渲染输出
             RenderOutput r_output;
-            // Use the render mode from parameters
+            // 根据参数选择渲染模式
             if (!params_.optimization.gut) {
+                // 非GUT模式：使用快速光栅化
                 r_output = fast_rasterize(adjusted_cam, strategy_->get_model(), background_);
             } else {
+                // GUT模式：使用标准光栅化
                 r_output = rasterize(adjusted_cam, strategy_->get_model(), background_, 1.0f, false, false, render_mode,
                                      nullptr, true);
             }
 
-            // Apply bilateral grid if enabled
+            // 如果启用双边网格，应用其效果
             if (bilateral_grid_ && params_.optimization.use_bilateral_grid) {
                 r_output.image = bilateral_grid_->apply(r_output.image, cam->uid());
             }
 
-            // Compute losses
+            // 计算损失：光度损失（主要损失）
             auto loss_result = compute_photometric_loss(r_output,
                                                         gt_image,
                                                         strategy_->get_model(),
@@ -320,49 +377,49 @@ namespace gs::training {
             }
 
             torch::Tensor loss = *loss_result;
-            loss.backward();
+            loss.backward();  // 反向传播
             float loss_value = loss.item<float>();
 
-            // Scale regularization loss
+            // 缩放正则化损失
             auto scale_loss_result = compute_scale_reg_loss(strategy_->get_model(), params_.optimization);
             if (!scale_loss_result) {
                 return std::unexpected(scale_loss_result.error());
             }
             loss = *scale_loss_result;
-            loss.backward();
+            loss.backward();  // 反向传播
             loss_value += loss.item<float>();
 
-            // Opacity regularization loss
+            // 不透明度正则化损失
             auto opacity_loss_result = compute_opacity_reg_loss(strategy_->get_model(), params_.optimization);
             if (!opacity_loss_result) {
                 return std::unexpected(opacity_loss_result.error());
             }
             loss = *opacity_loss_result;
-            loss.backward();
+            loss.backward();  // 反向传播
             loss_value += loss.item<float>();
 
-            // Bilateral grid TV loss
+            // 双边网格总变分损失
             auto tv_loss_result = compute_bilateral_grid_tv_loss(bilateral_grid_, params_.optimization);
             if (!tv_loss_result) {
                 return std::unexpected(tv_loss_result.error());
             }
             loss = *tv_loss_result;
-            loss.backward();
+            loss.backward();  // 反向传播
             loss_value += loss.item<float>();
 
-            // Store the loss value immediately
+            // 立即存储损失值
             current_loss_ = loss_value;
 
-            // Update progress synchronously if needed
+            // 如果需要，同步更新进度
             if (progress_) {
                 progress_->update(iter, loss_value,
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
             }
 
-            // Emit training progress event (throttled to reduce GUI updates)
+            // 发出训练进度事件（节流以减少GUI更新）
             if (iter % 10 == 0 || iter == 1) {
-                // Only update every 10 iterations
+                // 每10次迭代更新一次
                 events::state::TrainingProgress{
                     .iteration = iter,
                     .loss = loss_value,
@@ -370,35 +427,41 @@ namespace gs::training {
                     .is_refining = strategy_->is_refining(iter)}
                     .emit();
             }
+            
+            // 使用NoGradGuard确保不计算梯度
             {
                 torch::NoGradGuard no_grad;
 
                 DeferredEvents deferred;
                 {
+                    // 获取渲染互斥锁
                     std::unique_lock<std::shared_mutex> lock(render_mutex_);
 
-                    // Execute strategy post-backward and step
+                    // 执行策略的后向传播后处理和步骤更新
                     strategy_->post_backward(iter, r_output);
                     strategy_->step(iter);
 
+                    // 如果使用双边网格，更新其优化器
                     if (params_.optimization.use_bilateral_grid) {
                         bilateral_grid_optimizer_->step();
                         bilateral_grid_optimizer_->zero_grad(true);
                     }
+                    
+                    // 如果启用姿态优化，更新姿态优化器
                     if (params_.optimization.pose_optimization != "none") {
                         poseopt_optimizer_->step();
                         poseopt_optimizer_->zero_grad(true);
                     }
 
-                    // Queue event for emission after lock release
+                    // 在锁释放后将事件加入队列
                     deferred.add(events::state::ModelUpdated{
                         .iteration = iter,
                         .num_gaussians = static_cast<size_t>(strategy_->get_model().size())});
-                } // Lock released here
+                } // 锁在这里释放
 
-                // Events automatically emitted here when deferred destructs
+                // 当deferred析构时，事件会自动发出
 
-                // Clean evaluation - let the evaluator handle everything
+                // 清理评估：让评估器处理所有事情
                 if (evaluator_->is_enabled() && evaluator_->should_evaluate(iter)) {
                     evaluator_->print_evaluation_header(iter);
                     auto metrics = evaluator_->evaluate(iter,
@@ -408,14 +471,14 @@ namespace gs::training {
                     std::println("{}", metrics.to_string());
                 }
 
-                // Save model at specified steps
+                // 在指定步骤保存模型
                 if (!params_.optimization.skip_intermediate_saving) {
                     for (size_t save_step : params_.optimization.save_steps) {
                         if (iter == static_cast<int>(save_step) && iter != params_.optimization.iterations) {
                             const bool join_threads = (iter == params_.optimization.save_steps.back());
                             auto save_path = params_.dataset.output_path;
-                            save_ply(save_path, iter, /*join=*/join_threads);
-                            // Emit checkpoint saved event
+                            save_ply(save_path, iter, /*join=*/join_threads);  // 保存PLY文件
+                            // 发出检查点保存事件
                             events::state::CheckpointSaved{
                                 .iteration = iter,
                                 .path = save_path}
@@ -424,29 +487,33 @@ namespace gs::training {
                     }
                 }
 
+                // 时间轴图像生成：定期渲染指定图像
                 if (!params_.dataset.timelapse_images.empty() && iter % params_.dataset.timelapse_every == 0) {
                     for (const auto& img_name : params_.dataset.timelapse_images) {
+                        // 获取训练和验证数据集中的相机
                         auto train_cam = train_dataset_->get_camera_by_filename(img_name);
                         auto val_cam = val_dataset_ ? val_dataset_->get_camera_by_filename(img_name) : std::nullopt;
                         if (train_cam.has_value() || val_cam.has_value()) {
                             Camera* cam_to_use = train_cam.has_value() ? train_cam.value() : val_cam.value();
 
-                            // Image size isn't correct until the image has been loaded once
-                            // If we use the camera before it's loaded, it will render images at the non-scaled size
+                            // 图像尺寸在图像加载一次之前不正确
+                            // 如果我们在图像加载之前使用相机，它将以非缩放尺寸渲染图像
                             if (cam_to_use->camera_height() == cam_to_use->image_height() && params_.dataset.resize_factor != 1) {
                                 cam_to_use->load_image_size(params_.dataset.resize_factor);
                             }
 
+                            // 渲染时间轴图像
                             RenderOutput rendered_timelapse_output = fast_rasterize(
                                 *cam_to_use, strategy_->get_model(), background_);
 
-                            // Get folder name to save in by stripping file extension
+                            // 通过去除文件扩展名获取保存文件夹名称
                             std::string folder_name = img_name;
                             auto last_dot = folder_name.find_last_of('.');
                             if (last_dot != std::string::npos) {
                                 folder_name = folder_name.substr(0, last_dot);
                             }
 
+                            // 创建输出路径并保存图像
                             auto output_path = params_.dataset.output_path / "timelapse" / folder_name;
                             std::filesystem::create_directories(output_path);
 
@@ -459,83 +526,98 @@ namespace gs::training {
                 }
             }
 
-            // Return Continue if we should continue training
+            // 如果应该继续训练，返回Continue
             if (iter < params_.optimization.iterations && !stop_requested_.load() && !stop_token.stop_requested()) {
                 return StepResult::Continue;
             } else {
                 return StepResult::Stop;
             }
         } catch (const std::exception& e) {
+            // 异常处理：返回错误信息
             return std::unexpected(std::format("Training step failed: {}", e.what()));
         }
     }
 
+    /**
+     * [功能描述]：执行训练循环，包括数据加载、训练步骤、进度更新和模型保存等核心训练流程。
+     * @param stop_token [参数说明]：停止令牌，用于支持训练的中断和停止请求。
+     * @return [返回值说明]：成功时返回void，失败时返回错误字符串。
+     */
     std::expected<void, std::string> Trainer::train(std::stop_token stop_token) {
-        is_running_ = false;
-        training_complete_ = false;
-        ready_to_start_ = false; // Reset the flag
+        // 重置训练状态标志
+        is_running_ = false;           // 训练运行状态
+        training_complete_ = false;     // 训练完成状态
+        ready_to_start_ = false;       // 重置准备开始标志
 
-        // Event-based ready signaling
+        // 基于事件的准备信号处理（仅在非无头模式下）
         if (!params_.optimization.headless) {
-            // Subscribe to start signal (no need to store handle)
+            // 订阅开始信号（无需存储句柄）
             events::internal::TrainingReadyToStart::when([this](const auto&) {
                 ready_to_start_ = true;
             });
 
-            // Signal we're ready
+            // 发出我们已准备好的信号
             events::internal::TrainerReady{}.emit();
 
-            // Wait for start signal
+            // 等待开始信号，同时检查停止请求
             while (!ready_to_start_.load() && !stop_token.stop_requested()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));  // 50毫秒轮询间隔
             }
         }
 
-        is_running_ = true; // Now we can start
+        is_running_ = true; // 现在可以开始训练
 
         try {
-            int iter = 1;
-            const int num_workers = 16;
-            const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);
+            // 初始化训练变量
+            int iter = 1;                           // 当前迭代次数
+            const int num_workers = 16;             // 数据加载器工作线程数
+            const RenderMode render_mode = stringToRenderMode(params_.optimization.render_mode);  // 渲染模式
 
+            // 更新进度信息（如果存在进度回调）
             if (progress_) {
                 progress_->update(iter, current_loss_.load(),
                                   static_cast<int>(strategy_->get_model().size()),
                                   strategy_->is_refining(iter));
             }
 
-            // Use infinite dataloader to avoid epoch restarts
+            // 使用无限数据加载器避免epoch重启
             auto train_dataloader = create_infinite_dataloader_from_dataset(train_dataset_, num_workers);
-            auto loader = train_dataloader->begin();
+            auto loader = train_dataloader->begin(); // 返回开始迭代器
 
-            // Single loop without epochs
+            // 单循环训练，不使用epochs
             while (iter <= params_.optimization.iterations) {
+                // 检查停止请求
                 if (stop_token.stop_requested() || stop_requested_.load()) {
                     break;
                 }
 
-                // Wait for previous callback if still running
+                // 等待前一个回调完成（如果仍在运行）
                 if (callback_busy_.load()) {
                     callback_stream_.synchronize();
                 }
 
+                // 获取当前批次数据
                 auto& batch = *loader;
                 auto camera_with_image = batch[0].data;
                 Camera* cam = camera_with_image.camera;
+                // 将图像数据移动到CUDA设备，使用非阻塞传输
                 torch::Tensor gt_image = std::move(camera_with_image.image).to(torch::kCUDA, /*non_blocking=*/true);
 
+                // 执行训练步骤
                 auto step_result = train_step(iter, cam, gt_image, render_mode, stop_token);
                 if (!step_result) {
                     return std::unexpected(step_result.error());
                 }
 
+                // 检查训练步骤结果，如果是停止信号则退出
                 if (*step_result == StepResult::Stop) {
                     break;
                 }
 
-                // Launch callback for async progress update (except first iteration)
+                // 启动异步进度更新回调（除第一次迭代外）
                 if (iter > 1 && callback_) {
                     callback_busy_ = true;
+                    // 使用CUDA主机函数启动异步回调
                     auto err = cudaLaunchHostFunc(
                         callback_stream_.stream(),
                         [](void* self) {
@@ -552,39 +634,47 @@ namespace gs::training {
                     }
                 }
 
+                // 递增迭代次数和数据加载器
                 ++iter;
                 ++loader;
             }
 
-            // Ensure callback is finished before final save
+            // 确保回调在最终保存前完成
             if (callback_busy_.load()) {
                 callback_stream_.synchronize();
             }
 
-            // Final save if not already saved by stop request
+            // 如果不是由停止请求触发的保存，则进行最终保存
             if (!stop_requested_.load() && !stop_token.stop_requested()) {
                 auto final_path = params_.dataset.output_path;
-                save_ply(final_path, iter - 1, /*join=*/true);
-                // Emit final checkpoint saved event
+                save_ply(final_path, iter - 1, /*join=*/true);  // 保存最终PLY文件
+                // 发出最终检查点保存事件
                 events::state::CheckpointSaved{
                     .iteration = iter - 1,
                     .path = final_path}
                     .emit();
             }
 
+            // 完成进度更新
             if (progress_) {
                 progress_->complete();
             }
+            
+            // 保存评估报告
             evaluator_->save_report();
+            
+            // 打印最终摘要
             if (progress_) {
                 progress_->print_final_summary(static_cast<int>(strategy_->get_model().size()));
             }
 
+            // 更新训练状态
             is_running_ = false;
             training_complete_ = true;
 
-            return {};
+            return {};  // 训练成功完成
         } catch (const std::exception& e) {
+            // 异常处理：更新状态并返回错误信息
             is_running_ = false;
             return std::unexpected(std::format("Training failed: {}", e.what()));
         }

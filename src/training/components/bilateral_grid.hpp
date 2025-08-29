@@ -1,32 +1,115 @@
 #pragma once
-#include <torch/torch.h>
+#include <torch/torch.h>  // PyTorch核心库，提供张量操作和神经网络功能
 
 namespace gs::training {
 
+    /**
+     * [功能描述]：双边网格类，用于实现图像的后处理增强和风格化效果。
+     * 双边网格是一种空间自适应滤波器，可以根据图像的空间位置和颜色/亮度值
+     * 来调整像素值，常用于图像去噪、边缘保持平滑、色调映射等应用。
+     * 
+     * 在3D高斯溅射渲染中，双边网格用于：
+     * 1. 对渲染结果进行后处理增强
+     * 2. 实现风格化效果
+     * 3. 提供可学习的图像处理参数
+     */
     class BilateralGrid {
     public:
+        /**
+         * [功能描述]：构造函数，初始化双边网格。
+         * @param num_images [参数说明]：图像数量，决定网格的第一个维度。
+         * @param grid_W [参数说明]：网格宽度，默认为16，表示在水平方向上划分的网格数量。
+         * @param grid_H [参数说明]：网格高度，默认为16，表示在垂直方向上划分的网格数量。
+         * @param grid_L [参数说明]：网格引导维度，默认为8，表示在颜色/亮度引导方向上的网格数量。
+         */
         BilateralGrid(int num_images, int grid_W = 16, int grid_H = 16, int grid_L = 8);
 
-        // Apply bilateral grid to rendered image
+        /**
+         * [功能描述]：将双边网格应用到渲染的图像上，实现图像的后处理增强。
+         * 这个函数会根据图像的空间位置和颜色信息，从网格中采样相应的参数，
+         * 然后应用这些参数来调整图像的像素值。
+         * @param rgb [参数说明]：输入的RGB图像张量，通常是渲染的结果。
+         * @param image_idx [参数说明]：图像索引，用于选择对应的网格参数。
+         * @return [返回值说明]：处理后的图像张量，具有与输入相同的形状。
+         */
         torch::Tensor apply(const torch::Tensor& rgb, int image_idx);
 
-        // Compute total variation loss
+        /**
+         * [功能描述]：计算总变分损失，用于正则化网格参数。
+         * 总变分损失鼓励网格参数在空间上平滑变化，避免过度拟合和噪声。
+         * 这是双边网格训练过程中的重要正则化项。
+         * @return [返回值说明]：总变分损失值，是一个标量张量。
+         */
         torch::Tensor tv_loss() const;
 
-        // Get parameters for optimizer
+        /**
+         * [功能描述]：获取网格参数，供优化器使用。
+         * 这个函数返回网格张量的引用，允许优化器直接修改参数。
+         * @return [返回值说明]：网格参数张量的引用，形状为[N, 12, L, H, W]。
+         */
         torch::Tensor parameters() { return grids_; }
+        
+        /**
+         * [功能描述]：获取网格参数的常量引用，用于只读访问。
+         * 这个函数返回网格张量的常量引用，不允许修改参数。
+         * @return [返回值说明]：网格参数张量的常量引用，形状为[N, 12, L, H, W]。
+         */
         const torch::Tensor& parameters() const { return grids_; }
 
-        // Grid dimensions
+        /**
+         * [功能描述]：获取网格宽度维度。
+         * @return [返回值说明]：网格在水平方向上的划分数量。
+         */
         int grid_width() const { return grid_width_; }
+        
+        /**
+         * [功能描述]：获取网格高度维度。
+         * @return [返回值说明]：网格在垂直方向上的划分数量。
+         */
         int grid_height() const { return grid_height_; }
+        
+        /**
+         * [功能描述]：获取网格引导维度。
+         * @return [返回值说明]：网格在颜色/亮度引导方向上的划分数量。
+         */
         int grid_guidance() const { return grid_guidance_; }
 
     private:
-        torch::Tensor grids_; // [N, 12, L, H, W]
+        /**
+         * [功能说明]：网格参数张量，存储所有图像的双边网格参数。
+         * 维度为[N, 12, L, H, W]，其中：
+         * - N: 图像数量
+         * - 12: 每个网格点的参数数量（通常包括RGB变换、对比度、亮度等参数）
+         * - L: 引导维度（颜色/亮度引导）
+         * - H: 网格高度
+         * - W: 网格宽度
+         * 
+         * 这些参数是可学习的，通过训练过程优化以获得最佳的图像处理效果。
+         */
+        torch::Tensor grids_;
+        
+        /**
+         * [功能说明]：图像数量，决定网格张量的第一个维度。
+         */
         int num_images_;
+        
+        /**
+         * [功能说明]：网格宽度，决定网格在水平方向上的划分数量。
+         * 较大的值提供更精细的空间控制，但会增加计算复杂度和内存使用。
+         */
         int grid_width_;
+        
+        /**
+         * [功能说明]：网格高度，决定网格在垂直方向上的划分数量。
+         * 较大的值提供更精细的空间控制，但会增加计算复杂度和内存使用。
+         */
         int grid_height_;
+        
+        /**
+         * [功能说明]：网格引导维度，决定网格在颜色/亮度引导方向上的划分数量。
+         * 这个维度允许网格根据图像的颜色或亮度值自适应地调整参数，
+         * 实现更智能的图像处理效果。
+         */
         int grid_guidance_;
     };
 

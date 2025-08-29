@@ -38,7 +38,20 @@ namespace gs::training {
             masks.defined() ? masks.contiguous() : masks)[0];
     }
 
-    // Main render function
+    /**
+     * [功能描述]：主要的渲染函数，实现3D高斯溅射模型到2D图像的光栅化过程。
+     * 这是完整的渲染管线，包括投影、颜色计算、光栅化和后处理等步骤。
+     * @param viewpoint_camera [参数说明]：视点相机对象，包含相机内参、外参和图像尺寸信息。
+     * @param gaussian_model [参数说明]：高斯溅射模型数据，包含位置、缩放、旋转、不透明度和球谐函数系数。
+     * @param bg_color [参数说明]：背景颜色张量，用于背景混合。
+     * @param scaling_modifier [参数说明]：缩放修改器，用于调整高斯的大小。
+     * @param packed [参数说明]：是否使用打包模式（当前实现不支持）。
+     * @param antialiased [参数说明]：是否启用抗锯齿。
+     * @param render_mode [参数说明]：渲染模式，决定输出图像的类型（RGB、深度、RGB+深度等）。
+     * @param bounding_box [参数说明]：边界框指针，用于过滤高斯点（可选）。
+     * @param gut [参数说明]：是否使用GUT（Generalized Unscented Transform）光栅化器。
+     * @return [返回值说明]：RenderOutput结构，包含渲染的图像、透明度、深度等信息。
+     */
     RenderOutput rasterize(
         Camera& viewpoint_camera,
         const SplatData& gaussian_model,
@@ -49,39 +62,40 @@ namespace gs::training {
         RenderMode render_mode,
         const gs::geometry::BoundingBox* bounding_box,
         bool gut) {
-        // Ensure we don't use packed mode (not supported in this implementation)
+        
+        // 检查不支持的功能：打包模式在此实现中不支持
         TORCH_CHECK(!packed, "Packed mode is not supported in this implementation");
 
-        // Get camera parameters
-        const int image_height = static_cast<int>(viewpoint_camera.image_height());
-        const int image_width = static_cast<int>(viewpoint_camera.image_width());
+        // 获取相机参数
+        const int image_height = static_cast<int>(viewpoint_camera.image_height());  // 图像高度
+        const int image_width = static_cast<int>(viewpoint_camera.image_width());    // 图像宽度
 
-        // Prepare viewmat and K
-        auto viewmat = viewpoint_camera.world_view_transform().to(torch::kCUDA);
+        // 准备视图矩阵和相机内参矩阵
+        auto viewmat = viewpoint_camera.world_view_transform().to(torch::kCUDA);  // 世界到相机的变换矩阵
         TORCH_CHECK(viewmat.dim() == 3 && viewmat.size(0) == 1 && viewmat.size(1) == 4 && viewmat.size(2) == 4,
                     "viewmat must be [1, 4, 4] after transpose and unsqueeze, got ", viewmat.sizes());
         TORCH_CHECK(viewmat.is_cuda(), "viewmat must be on CUDA");
 
-        const auto K = viewpoint_camera.K().to(torch::kCUDA);
+        const auto K = viewpoint_camera.K().to(torch::kCUDA);  // 相机内参矩阵
         TORCH_CHECK(K.is_cuda(), "K must be on CUDA");
 
-        // Get Gaussian parameters
-        auto means3D = gaussian_model.get_means();
+        // 获取高斯模型的参数
+        auto means3D = gaussian_model.get_means();        // 3D高斯中心位置 [N, 3]
 
-        auto opacities = gaussian_model.get_opacity();
+        auto opacities = gaussian_model.get_opacity();    // 不透明度值
         if (opacities.dim() == 2 && opacities.size(1) == 1) {
-            opacities = opacities.squeeze(-1);
+            opacities = opacities.squeeze(-1);  // 如果形状是[N, 1]，压缩为[N]
         }
-        auto scales = gaussian_model.get_scaling();
-        auto rotations = gaussian_model.get_rotation();
-        auto sh_coeffs = gaussian_model.get_shs();
-        const int sh_degree = gaussian_model.get_active_sh_degree();
+        auto scales = gaussian_model.get_scaling();       // 缩放参数 [N, 3]
+        auto rotations = gaussian_model.get_rotation();   // 旋转参数 [N, 4]（四元数）
+        auto sh_coeffs = gaussian_model.get_shs();       // 球谐函数系数 [N, K, 3]
+        const int sh_degree = gaussian_model.get_active_sh_degree();  // 活跃的球谐函数阶数
 
-        // Apply bounding box filtering if provided
+        // 如果提供了边界框，应用边界框过滤
         if (bounding_box != nullptr) {
             torch::Tensor inside_indices;
 
-            // Convert GLM vectors to torch tensors
+            // 将GLM向量转换为PyTorch张量
             auto min_bounds = torch::tensor({bounding_box->getMinBounds().x,
                                              bounding_box->getMinBounds().y,
                                              bounding_box->getMinBounds().z},
@@ -91,40 +105,40 @@ namespace gs::training {
                                              bounding_box->getMaxBounds().z},
                                             torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
 
-            // Get the world2BBox transformation matrix
+            // 获取世界坐标系到边界框坐标系的变换矩阵
             const glm::mat4 world2bbox = bounding_box->getworld2BBox().toMat4();
 
-            // Convert GLM matrix to torch tensor [4, 4]
+            // 将GLM矩阵转换为PyTorch张量 [4, 4]
             auto world2bbox_tensor = torch::zeros(
                 {4, 4}, torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCUDA));
             for (int i = 0; i < 4; ++i) {
                 for (int j = 0; j < 4; ++j) {
-                    world2bbox_tensor[i][j] = world2bbox[j][i]; // GLM is column-major!
+                    world2bbox_tensor[i][j] = world2bbox[j][i]; // GLM是列主序！
                 }
             }
 
-            // Transform points from world space to bounding box space
-            // means3D: [N, 3] -> homogeneous: [N, 4]
+            // 将点从世界空间变换到边界框空间
+            // means3D: [N, 3] -> 齐次坐标: [N, 4]
             const int N = means3D.size(0);
             auto means3D_homogeneous = torch::cat({means3D, torch::ones({N, 1}, means3D.options())}, /*dim=*/1);
             // [N, 4]
 
-            // Apply transformation: [N, 4] @ [4, 4]^T = [N, 4]
+            // 应用变换: [N, 4] @ [4, 4]^T = [N, 4]
             auto means3D_bbox = torch::matmul(means3D_homogeneous, world2bbox_tensor.transpose(0, 1)); // [N, 4]
 
-            // Extract the transformed 3D coordinates (ignore homogeneous coordinate)
+            // 提取变换后的3D坐标（忽略齐次坐标）
             auto means3D_bbox_xyz = means3D_bbox.index({Slice(), Slice(None, 3)}); // [N, 3]
 
-            // Check which points are inside the axis-aligned bounding box in bbox space
-            // Now we can use simple axis-aligned box test since the points have been transformed
+            // 检查哪些点在边界框空间中的轴对齐边界框内部
+            // 由于点已经被变换，现在可以使用简单的轴对齐框测试
             auto greater_than_min = torch::all(means3D_bbox_xyz >= min_bounds.unsqueeze(0), /*dim=*/1); // [N]
             auto less_than_max = torch::all(means3D_bbox_xyz <= max_bounds.unsqueeze(0), /*dim=*/1);    // [N]
             auto inside_mask = greater_than_min & less_than_max;                                        // [N]
 
-            // Get indices of points inside the bounding box
-            inside_indices = torch::nonzero(inside_mask).squeeze(-1); // [M] where M <= N
+            // 获取边界框内部点的索引
+            inside_indices = torch::nonzero(inside_mask).squeeze(-1); // [M] 其中 M <= N
 
-            // Filter all Gaussian parameters using the inside indices
+            // 使用内部索引过滤所有高斯参数
             means3D = means3D.index({inside_indices});
             opacities = opacities.index({inside_indices});
             scales = scales.index({inside_indices});
@@ -132,7 +146,7 @@ namespace gs::training {
             sh_coeffs = sh_coeffs.index({inside_indices});
         }
 
-        // Validate Gaussian parameters
+        // 验证高斯参数
         const int N = static_cast<int>(means3D.size(0));
         TORCH_CHECK(means3D.dim() == 2 && means3D.size(1) == 3,
                     "means3D must be [N, 3], got ", means3D.sizes());
@@ -145,38 +159,40 @@ namespace gs::training {
         TORCH_CHECK(sh_coeffs.dim() == 3 && sh_coeffs.size(0) == N && sh_coeffs.size(2) == 3,
                     "sh_coeffs must be [N, K, 3], got ", sh_coeffs.sizes());
 
-        // Check if we have enough SH coefficients for the requested degree
+        // 检查是否有足够的球谐函数系数来满足请求的阶数
         const int required_sh_coeffs = (sh_degree + 1) * (sh_degree + 1);
         TORCH_CHECK(sh_coeffs.size(1) >= required_sh_coeffs,
                     "Not enough SH coefficients. Expected at least ", required_sh_coeffs,
                     " but got ", sh_coeffs.size(1));
 
-        // Device checks for Gaussian parameters
+        // 检查高斯参数的设备位置
         TORCH_CHECK(means3D.is_cuda(), "means3D must be on CUDA");
         TORCH_CHECK(opacities.is_cuda(), "opacities must be on CUDA");
         TORCH_CHECK(scales.is_cuda(), "scales must be on CUDA");
         TORCH_CHECK(rotations.is_cuda(), "rotations must be on CUDA");
         TORCH_CHECK(sh_coeffs.is_cuda(), "sh_coeffs must be on CUDA");
 
-        // Handle background color - can be undefined
+        // 处理背景颜色 - 可能未定义
         torch::Tensor prepared_bg_color;
         if (!bg_color.defined() || bg_color.numel() == 0) {
-            // Keep it undefined
+            // 保持未定义状态
             prepared_bg_color = torch::Tensor();
         } else {
-            prepared_bg_color = bg_color.view({1, -1}).to(torch::kCUDA);
+            prepared_bg_color = bg_color.view({1, -1}).to(torch::kCUDA);  // 重塑为[1, 3]并移动到CUDA
             TORCH_CHECK(prepared_bg_color.size(0) == 1 && prepared_bg_color.size(1) == 3,
                         "bg_color must be reshapeable to [1, 3], got ", prepared_bg_color.sizes());
             TORCH_CHECK(prepared_bg_color.is_cuda(), "bg_color must be on CUDA");
         }
 
-        const float eps2d = 0.3f;
-        const float near_plane = 0.01f;
-        const float far_plane = 10000.0f;
-        const float radius_clip = 0.0f;
-        const int tile_size = 16;
-        const bool calc_compensations = antialiased;
+        // 设置渲染参数
+        const float eps2d = 0.3f;           // 2D投影的epsilon值
+        const float near_plane = 0.01f;     // 近裁剪平面
+        const float far_plane = 10000.0f;   // 远裁剪平面
+        const float radius_clip = 0.0f;     // 半径裁剪值
+        const int tile_size = 16;           // 瓦片大小
+        const bool calc_compensations = antialiased;  // 是否计算补偿（用于抗锯齿）
 
+        // 处理相机畸变参数
         std::optional<torch::Tensor> radial_distortion;
         if (viewpoint_camera.radial_distortion().numel() > 0) {
             radial_distortion = viewpoint_camera.radial_distortion().to(torch::kCUDA);
@@ -188,13 +204,15 @@ namespace gs::training {
             TORCH_CHECK(tangential_distortion->dim() == 1, "tangential_distortion must be 1D, got ", tangential_distortion->sizes());
         }
 
-        // Step 1: Projection
-        torch::Tensor radii;
-        torch::Tensor means2d;
-        torch::Tensor depths;
-        torch::Tensor conics;
-        torch::Tensor compensations;
+        // 步骤1：投影 - 将3D高斯投影到2D图像平面
+        torch::Tensor radii;           // 投影后的半径
+        torch::Tensor means2d;         // 投影后的2D位置
+        torch::Tensor depths;          // 深度值
+        torch::Tensor conics;          // 圆锥曲线参数
+        torch::Tensor compensations;   // 补偿值（用于抗锯齿）
+        
         if (gut) {
+            // 使用GUT投影器
             auto proj_settings = GUTProjectionSettings{
                 image_width,
                 image_height,
@@ -223,6 +241,7 @@ namespace gs::training {
             conics = proj_outputs[3];
             compensations = proj_outputs[4];
         } else {
+            // 使用标准投影器
             auto proj_settings = ProjectionSettings{
                 image_width,
                 image_height,
@@ -242,32 +261,32 @@ namespace gs::training {
             compensations = proj_outputs[4];
         }
 
-        // Create means2d with gradient tracking for backward compatibility
+        // 创建带梯度跟踪的means2d，用于反向传播兼容性
         auto means2d_with_grad = means2d.contiguous();
         means2d_with_grad.set_requires_grad(true);
         means2d_with_grad.retain_grad();
 
-        // Step 2: Compute colors from SH
-        // First, compute camera position from inverse viewmat
+        // 步骤2：从球谐函数计算颜色
+        // 首先，从逆视图矩阵计算相机位置
         auto viewmat_inv = torch::inverse(viewmat);
         auto campos = viewmat_inv.index({Slice(), Slice(None, 3), 3}); // [C, 3]
 
-        // Compute directions from camera to each Gaussian
+        // 计算从相机到每个高斯的方向向量
         auto dirs = means3D.unsqueeze(0) - campos.unsqueeze(1); // [C, N, 3]
 
-        // Create masks based on radii
+        // 基于半径创建掩码
         auto masks = (radii > 0).all(-1); // [C, N]
 
-        // The Python code broadcasts colors from [N, K, 3] to [C, N, K, 3] if needed
+        // Python代码将颜色从[N, K, 3]广播到[C, N, K, 3]（如果需要）
         auto shs = sh_coeffs.unsqueeze(0); // [1, N, K, 3]
 
-        // Now call spherical harmonics with proper directions
+        // 现在使用正确的方向调用球谐函数
         auto colors = spherical_harmonics(sh_degree, dirs, shs, masks); // [C, N, 3]
 
-        // Apply the SH offset and clamping for rendering (shift from [-0.5, 0.5] to [0, 1])
+        // 应用球谐函数偏移和裁剪进行渲染（从[-0.5, 0.5]偏移到[0, 1]）
         colors = torch::clamp_min(colors + 0.5f, 0.0f);
 
-        // Step 3: Handle depth based on render mode
+        // 步骤3：根据渲染模式处理深度
         torch::Tensor render_colors;
         torch::Tensor final_bg;
 
@@ -283,62 +302,67 @@ namespace gs::training {
             if (prepared_bg_color.defined()) {
                 final_bg = torch::zeros({1, 1}, prepared_bg_color.options());
             } else {
-                final_bg = torch::Tensor(); // Keep undefined
+                final_bg = torch::Tensor(); // 保持未定义
             }
             break;
 
         case RenderMode::RGB_D:
         case RenderMode::RGB_ED:
-            // Concatenate colors and depths
+            // 连接颜色和深度
             render_colors = torch::cat({colors, depths.unsqueeze(-1)}, -1); // [C, N, 4]
             if (prepared_bg_color.defined()) {
                 final_bg = torch::cat({prepared_bg_color, torch::zeros({1, 1}, prepared_bg_color.options())}, -1);
             } else {
-                final_bg = torch::Tensor(); // Keep undefined
+                final_bg = torch::Tensor(); // 保持未定义
             }
             break;
         }
 
         if (!final_bg.defined()) {
-            // Create empty tensor on CUDA - same pattern as compensations in projection
+            // 在CUDA上创建空张量 - 与投影中补偿值的模式相同
             final_bg = at::empty({0}, colors.options().dtype(torch::kFloat32));
         }
 
-        // Step 4: Apply opacity with compensations
+        // 步骤4：应用不透明度，包含补偿值
         torch::Tensor final_opacities;
         if (calc_compensations && compensations.defined() && compensations.numel() > 0) {
-            final_opacities = opacities.unsqueeze(0) * compensations;
+            final_opacities = opacities.unsqueeze(0) * compensations;  // 应用补偿值
         } else {
-            final_opacities = opacities.unsqueeze(0);
+            final_opacities = opacities.unsqueeze(0);  // 不应用补偿值
         }
         TORCH_CHECK(final_opacities.is_cuda(), "final_opacities must be on CUDA");
 
-        // Step 5: Tile intersection
-        const int tile_width = (image_width + tile_size - 1) / tile_size;
-        const int tile_height = (image_height + tile_size - 1) / tile_size;
+        // 步骤5：瓦片相交测试
+        const int tile_width = (image_width + tile_size - 1) / tile_size;   // 瓦片宽度数量
+        const int tile_height = (image_height + tile_size - 1) / tile_size; // 瓦片高度数量
 
+        // 计算每个高斯与哪些瓦片相交
         const auto isect_results = gsplat::intersect_tile(
             means2d_with_grad, radii, depths, {}, {},
             1, tile_size, tile_width, tile_height,
             true);
 
-        const auto tiles_per_gauss = std::get<0>(isect_results);
-        const auto isect_ids = std::get<1>(isect_results);
-        const auto flatten_ids = std::get<2>(isect_results);
+        const auto tiles_per_gauss = std::get<0>(isect_results);    // 每个高斯相交的瓦片数量
+        const auto isect_ids = std::get<1>(isect_results);          // 相交ID
+        const auto flatten_ids = std::get<2>(isect_results);        // 扁平化ID
 
+        // 计算相交偏移量
         auto isect_offsets = gsplat::intersect_offset(
             isect_ids, 1, tile_width, tile_height);
         isect_offsets = isect_offsets.reshape({1, tile_height, tile_width});
 
+        // 检查相交结果的设备位置
         TORCH_CHECK(tiles_per_gauss.is_cuda(), "tiles_per_gauss must be on CUDA");
         TORCH_CHECK(isect_ids.is_cuda(), "isect_ids must be on CUDA");
         TORCH_CHECK(flatten_ids.is_cuda(), "flatten_ids must be on CUDA");
         TORCH_CHECK(isect_offsets.is_cuda(), "isect_offsets must be on CUDA");
 
-        // Step 6: Rasterization
+        // 步骤6：光栅化 - 将高斯溅射到像素网格上
         torch::Tensor rendered_image;
         torch::Tensor rendered_alpha;
+        
         if (gut) {
+            // 使用GUT光栅化器
             auto raster_settings = GUTRasterizationSettings{
                 image_width,
                 image_height,
@@ -366,6 +390,7 @@ namespace gs::training {
             rendered_image = raster_outputs[0];
             rendered_alpha = raster_outputs[1];
         } else {
+            // 使用标准光栅化器
             auto raster_settings = RasterizationSettings{
                 image_width,
                 image_height,
@@ -378,24 +403,24 @@ namespace gs::training {
             rendered_alpha = raster_outputs[1];
         }
 
-        // Step 7: Post-process based on render mode
+        // 步骤7：根据渲染模式进行后处理
         torch::Tensor final_image, final_depth;
 
         switch (render_mode) {
         case RenderMode::RGB:
             final_image = rendered_image;
-            final_depth = torch::Tensor(); // Empty
+            final_depth = torch::Tensor(); // 空
             break;
 
         case RenderMode::D:
-            final_depth = rendered_image;  // It's actually depth
-            final_image = torch::Tensor(); // Empty
+            final_depth = rendered_image;  // 实际上是深度
+            final_image = torch::Tensor(); // 空
             break;
 
         case RenderMode::ED:
-            // Normalize accumulated depth by alpha to get expected depth
+            // 通过alpha归一化累积深度以获得期望深度
             final_depth = rendered_image / rendered_alpha.clamp_min(1e-10);
-            final_image = torch::Tensor(); // Empty
+            final_image = torch::Tensor(); // 空
             break;
 
         case RenderMode::RGB_D:
@@ -410,34 +435,35 @@ namespace gs::training {
             break;
         }
 
-        // Prepare output
+        // 准备输出结果
         RenderOutput result;
 
-        // Handle image output
+        // 处理图像输出
         if (final_image.defined() && final_image.numel() > 0) {
             result.image = torch::clamp(final_image.squeeze(0).permute({2, 0, 1}), 0.0f, 1.0f);
         } else {
             result.image = torch::Tensor();
         }
 
-        // Handle alpha output - always present
+        // 处理alpha输出 - 总是存在
         result.alpha = rendered_alpha.squeeze(0).permute({2, 0, 1});
 
-        // Handle depth output
+        // 处理深度输出
         if (final_depth.defined() && final_depth.numel() > 0) {
             result.depth = final_depth.squeeze(0).permute({2, 0, 1});
         } else {
             result.depth = torch::Tensor();
         }
 
-        result.means2d = means2d_with_grad;
-        result.depths = depths.squeeze(0);
-        result.radii = std::get<0>(radii.squeeze(0).max(-1));
-        result.visibility = (result.radii > 0);
-        result.width = image_width;
-        result.height = image_height;
+        // 设置其他输出字段
+        result.means2d = means2d_with_grad;                    // 2D投影位置
+        result.depths = depths.squeeze(0);                     // 深度值
+        result.radii = std::get<0>(radii.squeeze(0).max(-1)); // 最大半径
+        result.visibility = (result.radii > 0);                // 可见性掩码
+        result.width = image_width;                            // 图像宽度
+        result.height = image_height;                          // 图像高度
 
-        // Final device checks for outputs
+        // 最终检查输出结果的设备位置
         if (result.image.defined() && result.image.numel() > 0) {
             TORCH_CHECK(result.image.is_cuda(), "result.image must be on CUDA");
         }

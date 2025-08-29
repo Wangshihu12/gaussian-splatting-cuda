@@ -474,43 +474,67 @@ namespace gs::management {
         return true;
     }
 
+    /**
+     * [功能描述]：创建新的项目实例，设置项目名称、路径、输出目录、数据集信息和优化参数。
+     * @param data [参数说明]：数据集配置，包含数据路径、输出路径和项目路径等信息。
+     * @param opt [参数说明]：优化参数配置，包含训练和渲染相关的参数设置。
+     * @param project_name [参数说明]：项目名称，用于标识项目。
+     * @param update_file_on_change [参数说明]：是否在项目变更时自动更新文件，true表示自动更新。
+     * @return [返回值说明]：返回创建的项目智能指针，如果创建失败则返回nullptr。
+     */
     std::shared_ptr<Project> CreateNewProject(const gs::param::DatasetConfig& data,
                                               const param::OptimizationParameters& opt,
                                               const std::string& project_name,
                                               bool update_file_on_change) {
 
+        // 创建新的项目实例，传入自动更新标志
         auto project = std::make_shared<gs::management::Project>(update_file_on_change);
 
+        // 设置项目名称
         project->setProjectName(project_name);
+        
+        // 验证输出路径不能为空
         if (data.output_path.empty()) {
             LOG_ERROR("output_path is empty");
             return nullptr;
         }
+        
+        // 处理项目文件路径
         std::filesystem::path project_path = data.project_path;
         if (project_path.empty()) {
+            // 如果项目路径为空，则在输出目录下创建默认项目文件
             project_path = data.output_path / ("project" + Project::EXTENSION);
             LOG_INFO("project_path is empty - creating new project{} file", Project::EXTENSION);
         }
 
+        // 验证项目文件扩展名必须正确
         if (project_path.extension() != Project::EXTENSION) {
             LOG_ERROR("project_path must be {} file: {}", Project::EXTENSION, project_path.string());
             return nullptr;
         }
+        
+        // 验证项目文件路径必须包含父目录
         if (project_path.parent_path().empty()) {
             LOG_ERROR("project_path must have parent directory: project_path: {} ", project_path.string());
             return nullptr;
         }
 
         try {
+            // 设置项目文件名
             project->setProjectFileName(project_path);
+            // 设置项目输出目录
             project->setProjectOutputFolder(data.output_path);
+            // 设置数据集信息
             project->setDataInfo(data);
+            // 设置优化参数
             project->setOptimizationParams(opt);
         } catch (const std::exception& e) {
+            // 捕获并记录设置项目文件时的异常
             LOG_ERROR("Error writing project file: {}", e.what());
             return nullptr;
         }
 
+        // 返回成功创建的项目实例
         return project;
     }
 
