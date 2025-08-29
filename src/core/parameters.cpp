@@ -448,30 +448,41 @@ namespace gs {
         }
 
         /**
-         * @brief Read optimization parameters from JSON file
-         * @param[in] strategy Optimization strategy to load parameters for
-         * @return Expected OptimizationParameters or error message
+         * @brief 从JSON文件读取优化参数
+         * @param[in] strategy 要加载参数的优化策略名称
+         * @return 返回优化参数对象，如果读取失败则返回错误信息
          */
         std::expected<OptimizationParameters, std::string> read_optim_params_from_json(const std::string strategy) {
+            // 根据策略名称构建配置文件路径，并读取JSON文件
+            // 策略名称会与"_optimization_params.json"拼接，例如："mcmc_optimization_params.json"
             auto json_result = read_json_file(get_config_path(strategy + "_optimization_params.json"));
             if (!json_result) {
+                // 如果JSON文件读取失败，返回错误信息
                 return std::unexpected(json_result.error());
             }
 
+            // 获取成功读取的JSON对象
             auto json = *json_result;
 
-            // Create default parameters for verification
+            // 创建默认参数对象用于验证
+            // 这些默认参数将用于验证JSON中的参数是否有效
             OptimizationParameters defaults;
 
-            // Verify parameters before reading
+            // 在读取参数之前进行验证
+            // 使用默认参数和JSON对象验证参数的有效性
             verify_optimization_parameters(defaults, json);
 
             try {
+                // 从JSON对象创建OptimizationParameters对象
+                // 使用from_json静态方法进行反序列化
                 OptimizationParameters params = OptimizationParameters::from_json(json);
 
+                // 返回成功解析的参数对象
                 return params;
 
             } catch (const std::exception& e) {
+                // 捕获JSON解析过程中的任何异常
+                // 返回格式化的错误信息，包含具体的异常描述
                 return std::unexpected(std::format("Error parsing optimization parameters: {}", e.what()));
             }
         }
