@@ -83,43 +83,84 @@ namespace gs::training {
         }
     }
 
+    /**
+     * @brief 计算缩放参数正则化损失
+     * @param splatData 高斯散射体数据，包含所有高斯体的参数
+     * @param opt_params 优化参数，包含正则化权重等配置
+     * @return 成功时返回正则化损失张量，失败时返回错误信息
+     * @details 该函数计算缩放参数的正则化损失，用于防止缩放参数过大，提高模型稳定性。
+     *          当scale_reg > 0时，计算缩放参数的L1正则化损失；否则返回零张量。
+     */
     std::expected<torch::Tensor, std::string> Trainer::compute_scale_reg_loss(
         const SplatData& splatData,
         const param::OptimizationParameters& opt_params) {
         try {
+            // 检查是否启用缩放正则化
             if (opt_params.scale_reg > 0.0f) {
+                // 获取所有高斯体的缩放参数并计算平均值（L1正则化）
                 auto scale_l1 = splatData.get_scaling().mean();
+                // 返回正则化损失：权重系数 × L1损失
                 return opt_params.scale_reg * scale_l1;
             }
+            // 如果未启用正则化，返回零张量（需要梯度以保持计算图）
             return torch::zeros({1}, torch::kFloat32).requires_grad_();
         } catch (const std::exception& e) {
+            // 异常处理：捕获计算过程中的任何异常
+            // 返回包含错误信息的unexpected对象，使用std::format格式化错误消息
             return std::unexpected(std::format("Error computing scale regularization loss: {}", e.what()));
         }
     }
 
+    /**
+     * @brief 计算不透明度参数正则化损失
+     * @param splatData 高斯散射体数据，包含所有高斯体的参数
+     * @param opt_params 优化参数，包含正则化权重等配置
+     * @return 成功时返回正则化损失张量，失败时返回错误信息
+     * @details 该函数计算不透明度参数的正则化损失，用于防止不透明度参数过大，提高模型稳定性。
+     *          当opacity_reg > 0时，计算不透明度参数的L1正则化损失；否则返回零张量。
+     */
     std::expected<torch::Tensor, std::string> Trainer::compute_opacity_reg_loss(
         const SplatData& splatData,
         const param::OptimizationParameters& opt_params) {
         try {
+            // 检查是否启用不透明度正则化
             if (opt_params.opacity_reg > 0.0f) {
+                // 获取所有高斯体的不透明度参数并计算平均值（L1正则化）
                 auto opacity_l1 = splatData.get_opacity().mean();
+                // 返回正则化损失：权重系数 × L1损失
                 return opt_params.opacity_reg * opacity_l1;
             }
+            // 如果未启用正则化，返回零张量（需要梯度以保持计算图）
             return torch::zeros({1}, torch::kFloat32).requires_grad_();
         } catch (const std::exception& e) {
+            // 异常处理：捕获计算过程中的任何异常
+            // 返回包含错误信息的unexpected对象，使用std::format格式化错误消息
             return std::unexpected(std::format("Error computing opacity regularization loss: {}", e.what()));
         }
     }
 
+    /**
+     * @brief 计算双边网格总变差损失
+     * @param bilateral_grid 双边网格对象，用于计算TV损失
+     * @param opt_params 优化参数，包含TV损失权重等配置
+     * @return 成功时返回TV损失张量，失败时返回错误信息
+     * @details 该函数计算双边网格的总变差(TV)损失，用于保持网格的平滑性。
+     *          当use_bilateral_grid为true时，计算TV损失；否则返回零张量。
+     */
     std::expected<torch::Tensor, std::string> Trainer::compute_bilateral_grid_tv_loss(
         const std::unique_ptr<BilateralGrid>& bilateral_grid,
         const param::OptimizationParameters& opt_params) {
         try {
+            // 检查是否启用双边网格
             if (opt_params.use_bilateral_grid) {
+                // 计算双边网格的TV损失并乘以权重系数
                 return opt_params.tv_loss_weight * bilateral_grid->tv_loss();
             }
+            // 如果未启用双边网格，返回零张量（需要梯度以保持计算图）
             return torch::zeros({1}, torch::kFloat32).requires_grad_();
         } catch (const std::exception& e) {
+            // 异常处理：捕获计算过程中的任何异常
+            // 返回包含错误信息的unexpected对象，使用std::format格式化错误消息
             return std::unexpected(std::format("Error computing bilateral grid TV loss: {}", e.what()));
         }
     }

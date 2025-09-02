@@ -20,87 +20,155 @@
 #include <vector>
 
 namespace {
+    /**
+     * @brief 将张量尺寸转换为字符串表示
+     * @param sizes 张量的尺寸数组引用
+     * @return 返回格式化的尺寸字符串，如"[batch_size, height, width]"
+     * @details 该函数将PyTorch张量的尺寸信息转换为可读的字符串格式，
+     *          用于调试和日志输出。输出格式为方括号包围的逗号分隔列表。
+     */
     std::string tensor_sizes_to_string(const c10::ArrayRef<int64_t>& sizes) {
-        std::ostringstream oss;
-        oss << "[";
+        std::ostringstream oss;  // 创建字符串流用于构建输出字符串
+        oss << "[";              // 开始方括号
         for (size_t i = 0; i < sizes.size(); ++i) {
             if (i > 0)
-                oss << ", ";
-            oss << sizes[i];
+                oss << ", ";     // 在第一个元素后添加逗号分隔符
+            oss << sizes[i];     // 输出当前尺寸值
         }
-        oss << "]";
-        return oss.str();
+        oss << "]";             // 结束方括号
+        return oss.str();       // 返回构建的字符串
     }
 
-    // Point cloud adaptor for nanoflann
+    /**
+     * @struct PointCloudAdaptor
+     * @brief 点云适配器，用于nanoflann库的KD树索引
+     * @details 该结构体实现了nanoflann库所需的接口，将原始点云数据适配为KD树可处理的格式。
+     *          支持3D点云数据的快速最近邻搜索。
+     */
     struct PointCloudAdaptor {
-        const float* points;
-        size_t num_points;
+        const float* points;     ///< 指向点云数据的指针，每个点包含3个float值(x,y,z)
+        size_t num_points;      ///< 点云中点的总数
 
+        /**
+         * @brief 构造函数
+         * @param pts 指向点云数据的指针
+         * @param n 点的数量
+         * @details 初始化点云适配器，设置数据指针和点数量
+         */
         PointCloudAdaptor(const float* pts, size_t n) : points(pts),
                                                         num_points(n) {}
 
+        /**
+         * @brief 获取点云中点的数量
+         * @return 返回点的总数
+         * @details nanoflann库要求的接口函数，用于KD树构建
+         */
         inline size_t kdtree_get_point_count() const { return num_points; }
 
+        /**
+         * @brief 获取指定点的指定维度坐标
+         * @param idx 点的索引
+         * @param dim 维度索引(0=x, 1=y, 2=z)
+         * @return 返回指定点的指定维度坐标值
+         * @details nanoflann库要求的接口函数，用于访问点云数据。
+         *          假设数据按行优先存储，每个点占用3个连续的float值。
+         */
         inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
-            return points[idx * 3 + dim];
+            return points[idx * 3 + dim];  // 计算内存偏移：点索引*3 + 维度
         }
 
+        /**
+         * @brief 获取点云的边界框（未实现）
+         * @param bb 边界框参数（未使用）
+         * @return 始终返回false，表示不提供边界框信息
+         * @details nanoflann库的可选接口函数，此处未实现边界框功能
+         */
         template <class BBOX>
         bool kdtree_get_bbox(BBOX& /* bb */) const { return false; }
     };
 
-    // Fixed: KDTree typedef on single line
+    /**
+     * @typedef KDTree
+     * @brief KD树类型定义，用于3D点云的快速最近邻搜索
+     * @details 使用nanoflann库实现，支持L2距离度量的3D点云KD树索引。
+     *          模板参数说明：
+     *          - nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>: L2距离适配器
+     *          - PointCloudAdaptor: 点云数据适配器
+     *          - 3: 3D空间维度
+     */
     using KDTree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<float, PointCloudAdaptor>, PointCloudAdaptor, 3>;
 
-    // Compute mean distance to 3 nearest neighbors for each point
+    /**
+     * @brief 计算每个点到其3个最近邻的平均距离
+     * @param points 输入点云张量，形状为[N, 3]，包含N个3D点的坐标
+     * @return 返回每个点的平均邻居距离张量，形状为[N]
+     * @details 该函数使用KD树快速计算每个点到其最近3个邻居的平均距离。
+     *          这个距离信息常用于高斯散射体的初始化，帮助确定高斯体的初始缩放参数。
+     *          函数会自动处理边界情况，如点数量过少或距离过近的情况。
+     */
     torch::Tensor compute_mean_neighbor_distances(const torch::Tensor& points) {
+        // 将点云数据转移到CPU并确保内存连续，以便nanoflann库处理
         auto cpu_points = points.to(torch::kCPU).contiguous();
         const int num_points = cpu_points.size(0);
 
+        // 输入验证：确保点云形状正确[N, 3]且数据类型为float32
         TORCH_CHECK(cpu_points.dim() == 2 && cpu_points.size(1) == 3,
                     "Input points must have shape [N, 3]");
         TORCH_CHECK(cpu_points.dtype() == torch::kFloat32,
                     "Input points must be float32");
 
+        // 边界情况处理：如果点数量太少，返回默认距离值
         if (num_points <= 1) {
             return torch::full({num_points}, 0.01f, points.options());
         }
 
+        // 获取点云数据的原始指针，用于nanoflann库
         const float* data = cpu_points.data_ptr<float>();
 
+        // 创建点云适配器和KD树索引
         PointCloudAdaptor cloud(data, num_points);
-        KDTree index(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));
-        index.buildIndex();
+        KDTree index(3, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(10));  // 3D空间，10个叶子节点
+        index.buildIndex();  // 构建KD树索引
 
+        // 创建结果张量，用于存储每个点的平均邻居距离
         auto result = torch::zeros({num_points}, torch::kFloat32);
         float* result_data = result.data_ptr<float>();
 
+        // 并行处理每个点（当点数量大于1000时启用OpenMP并行）
 #pragma omp parallel for if (num_points > 1000)
         for (int i = 0; i < num_points; i++) {
+            // 提取当前查询点的3D坐标
             const float query_pt[3] = {data[i * 3 + 0], data[i * 3 + 1], data[i * 3 + 2]};
 
+            // 设置搜索结果数量（最多4个，但只使用前3个有效邻居）
             const size_t num_results = std::min(4, num_points);
-            std::vector<size_t> ret_indices(num_results);
-            std::vector<float> out_dists_sqr(num_results);
+            std::vector<size_t> ret_indices(num_results);      // 邻居点的索引
+            std::vector<float> out_dists_sqr(num_results);    // 距离的平方值
 
+            // 创建KNN结果集并初始化
             nanoflann::KNNResultSet<float> resultSet(num_results);
             resultSet.init(&ret_indices[0], &out_dists_sqr[0]);
+            // 执行最近邻搜索
             index.findNeighbors(resultSet, &query_pt[0], nanoflann::SearchParameters(10));
 
+            // 计算有效邻居的平均距离
             float sum_dist = 0.0f;
             int valid_neighbors = 0;
 
+            // 遍历搜索结果，计算前3个有效邻居的平均距离
             for (size_t j = 0; j < num_results && valid_neighbors < 3; j++) {
+                // 过滤掉距离过近的点（避免数值精度问题）
                 if (out_dists_sqr[j] > 1e-8f) {
-                    sum_dist += std::sqrt(out_dists_sqr[j]);
+                    sum_dist += std::sqrt(out_dists_sqr[j]);  // 将平方距离转换为欧几里得距离
                     valid_neighbors++;
                 }
             }
 
+            // 计算平均距离，如果没有有效邻居则使用默认值
             result_data[i] = (valid_neighbors > 0) ? (sum_dist / valid_neighbors) : 0.01f;
         }
 
+        // 将结果张量移回原始设备（GPU/CPU）
         return result.to(points.device());
     }
 

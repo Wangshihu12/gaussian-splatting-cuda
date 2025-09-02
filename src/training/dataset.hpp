@@ -110,26 +110,44 @@ namespace gs::training {
         std::vector<size_t> _indices;
     };
 
-    // Infinite random sampler for continuous data flow
+    /**
+     * @class InfiniteRandomSampler
+     * @brief 无限随机采样器，用于实现连续的数据流
+     * @details 继承自PyTorch的RandomSampler，当数据集遍历完毕后会自动重置并重新开始，
+     *          确保训练过程中数据永不耗尽。这对于长时间训练特别有用。
+     */
     class InfiniteRandomSampler : public torch::data::samplers::RandomSampler {
     public:
-        using super = torch::data::samplers::RandomSampler;
+        using super = torch::data::samplers::RandomSampler;  ///< 父类类型别名
 
+        /**
+         * @brief 构造函数
+         * @param dataset_size 数据集的大小
+         * @details 初始化采样器，设置数据集大小
+         */
         explicit InfiniteRandomSampler(size_t dataset_size)
             : super(dataset_size) {
         }
 
+        /**
+         * @brief 获取下一批数据的索引
+         * @param batch_size 批次大小
+         * @return 返回下一批数据的索引向量，如果数据用完则返回空
+         * @details 重写父类的next方法，当数据用完时自动重置采样器并重新开始
+         */
         std::optional<std::vector<size_t>> next(size_t batch_size) override {
+            // 尝试从父类获取下一批索引
             auto indices = super::next(batch_size);
+            // 如果没有更多数据（indices为空），则重置采样器并重新获取
             if (!indices) {
-                super::reset();
-                indices = super::next(batch_size);
+                super::reset();                    // 重置采样器状态
+                indices = super::next(batch_size); // 重新获取索引
             }
             return indices;
         }
 
     private:
-        size_t dataset_size_;
+        size_t dataset_size_;  ///< 数据集大小，用于内部状态管理
     };
 
     inline std::expected<std::tuple<std::shared_ptr<CameraDataset>, torch::Tensor>, std::string>
@@ -240,17 +258,27 @@ namespace gs::training {
                 .enforce_ordering(false));
     }
 
+    /**
+     * @brief 从数据集创建无限循环的数据加载器
+     * @param dataset 相机数据集，包含所有训练用的相机和图像
+     * @param num_workers 数据加载的工作线程数量，默认为4
+     * @return 返回一个无限循环的PyTorch数据加载器
+     * @details 该函数创建一个无限循环的数据加载器，当数据集遍历完毕后会自动重新开始，
+     *          确保训练过程中数据不会用完。使用InfiniteRandomSampler实现无限循环功能。
+     */
     inline auto create_infinite_dataloader_from_dataset(
         std::shared_ptr<CameraDataset> dataset,
         int num_workers = 4) {
+        // 获取数据集的大小，用于初始化采样器
         const size_t dataset_size = dataset->size().value();
 
+        // 创建PyTorch数据加载器，配置无限随机采样
         return torch::data::make_data_loader(
-            *dataset,
-            InfiniteRandomSampler(dataset_size),
+            *dataset,                                    // 传入数据集
+            InfiniteRandomSampler(dataset_size),        // 使用无限随机采样器，确保数据永不耗尽
             torch::data::DataLoaderOptions()
-                .batch_size(1)
-                .workers(num_workers)
-                .enforce_ordering(false));
+                .batch_size(1)                          // 批次大小为1，每次返回一个样本
+                .workers(num_workers)                    // 设置工作线程数量，用于并行数据加载
+                .enforce_ordering(false));              // 不强制保持数据顺序，提高性能
     }
 } // namespace gs::training
