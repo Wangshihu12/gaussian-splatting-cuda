@@ -142,16 +142,16 @@ namespace gs::training {
           grid_guidance_(grid_L) {       // 初始化网格引导维度
 
         // 步骤1：创建单位变换矩阵作为基础
-        auto eye = torch::eye(4, torch::kFloat32).slice(0, 0, 3);  // 取4x4单位矩阵的前3行
+        auto eye = torch::eye(4, torch::kFloat32).slice(0, 0, 3);  // 取4x4单位矩阵的前3行 [3,4]
         // 步骤2：将单位变换重复到所有网格点
-        auto grid = eye.repeat({grid_L * grid_H * grid_W, 1});      // 重复到所有网格点
+        auto grid = eye.repeat({grid_L * grid_H * grid_W, 1});      // 重复到所有网格点 [3LHW, 4]
         // 步骤3：重塑为5维张量 [1, L, H, W, 12]
-        grid = grid.reshape({1, grid_L, grid_H, grid_W, 12});
+        grid = grid.reshape({1, grid_L, grid_H, grid_W, 12}); // 最后一维 12 即把每个 3×4 展平
         // 步骤4：调整维度顺序为 [1, 12, L, H, W]，符合存储格式
-        grid = grid.permute({0, 4, 1, 2, 3});
+        grid = grid.permute({0, 4, 1, 2, 3}); // 调整顺序，把通道 C=12 放到前面
 
         // 步骤5：为所有图像复制网格参数，并移动到CUDA设备
-        grids_ = grid.repeat({num_images, 1, 1, 1, 1}).to(torch::kCUDA);
+        grids_ = grid.repeat({num_images, 1, 1, 1, 1}).to(torch::kCUDA); // [N, 12, L, H, W]
         // 步骤6：启用梯度计算，使网格参数可训练
         grids_.set_requires_grad(true);
     }
